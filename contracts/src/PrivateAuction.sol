@@ -114,7 +114,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
 
 
         // We receive the fund
-        uint256 excess = msg.value - auction.totalValueLock;
+        uint256 excess = msg.value - auctions[auctionId].totalValueLock;
 
         if (excess > 0) {
             (bool success, ) = msg.sender.call{value: excess}("");
