@@ -10,26 +10,27 @@ struct Auction {
     uint256 creationTime;
     einput eRequestedAmount;
     einput ePricePerUnit;
+    bool validated;
+    uint256 totalValueLock;
 }
 
 interface IPrivateAuction {
     
     /// Views
 
-    // Number of token created
-    function tokenAmount() public view returns(uint256);
-
     // End time of the auction
-    function endAuction() public view returns(uint256);
+    function endAuctionTime() external view returns(uint256);
 
     // See the existing auctions
-    function auctions(address user) public view returns(Auction);
+    function auctions(address user) external view returns(Auction memory);
 
 
     /// Actions
 
     // Any user can create a new auctions
-    function createAuction(einput eRequestedAmount, einput ePricePerUnit) payable external returns (uint);
+    function createAuction(einput eRequestedAmount, einput ePricePerUnit) external returns (uint);
+    
+    function confirmAuction(uint256 auctionId) payable external;
 
     // Cancel an auction
     function cancelAuction(uint256 auctionId) external;

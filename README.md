@@ -64,3 +64,31 @@ Other corner/edge cases may include:
 Should we create a DAO and the DAO take a fee on the transaction.
 
 
+
+
+# Workflow
+
+
+1. User create a new auction with a hiden price and amount
+    1.a A callback to the Gateway is done in order for us to know how much eth the user needs to lock in the smart contract
+    1.b The gateway reveals by the call back the amount the user needs to lock
+2. Then the user needs to validate by paying the smart contract wiht the expected amount
+
+3. When the auction is done
+    3.a We reveal all the hidden params of the auction (amount and price per token)
+    3.b Then, once all the auctions reveal, we order them by low price token
+    3.c Once order we proceed to the token distribution
+
+=> Needs to think about scale
+
+
+
+3.a -> Iterative given an while id < target --> callback
+3.b -> Previously ordered them by mapping (low price) => list of users
+    -> Only needs an order set to iterate it after. Can be managed each callback
+3.c -> Loop over the sets and users until not more token - Loop 
+
+
+-- Token last --> Prems
+When append / pop (remove prems)
+
