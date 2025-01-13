@@ -44,6 +44,8 @@ contract PrivateAuction is
         uint256 _supply,
         uint256 _endAuctionTime
     ) ERC20(_name, _symbol) Ownable(msg.sender) {
+        require(_endAuctionTime > block.timestamp, "INVALID_END_AUCTION_TIME");
+        
         _mint(msg.sender, _supply);
         endAuctionTime = _endAuctionTime;
     }

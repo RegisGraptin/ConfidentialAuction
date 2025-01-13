@@ -92,3 +92,15 @@ Should we create a DAO and the DAO take a fee on the transaction.
 -- Token last --> Prems
 When append / pop (remove prems)
 
+
+
+
+
+##### sepolia
+✅  [Success]Hash: 0x09be1db0cf7715dd2d983e115270baec2b6d6624142cf51766a90393a8b278b6
+Contract Address: 0xf9608f47363DFB1eaBB4142213B8d4789c48a90A
+Block: 7482217
+Paid: 0.08666734821799857 ETH (2755929 gas * 31.44759833 gwei)
+
+✅ Sequence #1 on sepolia | Total Paid: 0.08666734821799857 ETH (2755929 gas * avg 31.44759833 gwei)
+          
