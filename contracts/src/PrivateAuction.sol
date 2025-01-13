@@ -14,9 +14,8 @@ import {IPrivateAuction, Auction} from "./interfaces/IPrivateAuction.sol";
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-
 contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller, ReentrancyGuard {
-     
+
     // Auction properties
     uint256 public lastAuctionId;
     uint256 public endAuctionTime;
@@ -198,6 +197,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
     }
 
 
+    // Keep unicity given a price and list of auction id
     mapping (uint256 minPrice => uint256[]) orderedAuctionPerUser;
 
     function _gateway_callback_decypher_auction(
@@ -214,7 +214,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
         // Does the price already exists
         if (orderedAuctionPerUser[pricePerUnit].length == 0) {
             // Keep track of the price to iterate later on to asc order
-
+            // 
             
         }
 
