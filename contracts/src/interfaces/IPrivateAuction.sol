@@ -8,8 +8,8 @@ import "fhevm/lib/TFHE.sol";
 struct Auction {
     address user;
     uint256 creationTime;
-    einput eRequestedAmount;
-    einput ePricePerUnit;
+    euint256 eRequestedAmount;
+    euint256 ePricePerUnit;
     bool validated;
     uint256 totalValueLock;
 }

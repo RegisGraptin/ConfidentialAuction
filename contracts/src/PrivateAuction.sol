@@ -11,10 +11,18 @@ import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 
 import {IPrivateAuction, Auction} from "./interfaces/IPrivateAuction.sol";
 
-contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller {
+
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+
+contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller, ReentrancyGuard {
      
+    // Auction properties
     uint256 public lastAuctionId;
     uint256 public endAuctionTime;
+
+    // Decypher properties
+    uint256 public lastAuctionProccessed;
 
     mapping (uint256 auctionId => Auction) public auctions;
     mapping (uint256 requestId => uint256 auctionId) public decypherProcess;
@@ -50,15 +58,15 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
         einput ePricePerUnit,
         bytes calldata eRequestedAmountProof,
         bytes calldata ePricePerUnitProof
-    ) _activeAuction() external returns (uint) {
+    ) _activeAuction() external returns (uint256) {
 
         // Expect euint256 values
         euint256 eAmount = TFHE.asEuint256(eRequestedAmount, eRequestedAmountProof);
         euint256 ePrice  = TFHE.asEuint256(ePricePerUnit, ePricePerUnitProof);
 
         // Allow the smart contract to decypher those data on the resolution time
-        TFHE.allowThis(eRequestedAmount);
-        TFHE.allowThis(ePricePerUnit);
+        TFHE.allowThis(eAmount);
+        TFHE.allowThis(ePrice);
 
         // Get the expected total amount to be paid
         euint256 eAmountToPay = TFHE.mul(eAmount, ePrice);
@@ -81,11 +89,19 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
         // Create an auction that needs to be validated
         auctions[lastAuctionId] = Auction({
             user: msg.sender,
-            creationTime: block.timestamp
+            creationTime: block.timestamp,
+            eRequestedAmount: eAmount,
+            ePricePerUnit: ePrice,
+            validated: false,
+            totalValueLock: 0
         });
 
         // Increment the auction
         lastAuctionId++;
+
+        // TODO :: Emit event ?
+
+        return lastAuctionId - 1;
     }
 
 
@@ -96,24 +112,27 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
 
 
     // FIXME: Use reentrancy guard
-    function confirmAuction(uint256 auctionId) _activeAuction() payable external {
+    function confirmAuction(uint256 auctionId) _activeAuction() nonReentrant() payable external {
         require(auctionId < lastAuctionId, "INVALID_AUCTION_ID");
 
         // We expect the user to pay
         require(auctions[auctionId].user == msg.sender, "INVALID_USER");
         require(!auctions[auctionId].validated, "ALREADY_VALIDATED");
 
+        // We should know how much eth the user has to pay
+        require(auctions[auctionId].totalValueLock > 0, "INVALID_AUCTION");
+
         // We should have enough token
         require(msg.value >= auctions[auctionId].totalValueLock, "NOT_ENOUGH_FUNDS");
 
-
+        // Validate the auction
         auctions[auctionId].validated = true;
 
 
         // TODO: emit event ?
 
 
-        // We receive the fund
+        // Pay back the excess token to the user
         uint256 excess = msg.value - auctions[auctionId].totalValueLock;
 
         if (excess > 0) {
@@ -123,7 +142,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
 
     }
 
-    function cancelAuction(uint256 auctionId) _activeAuction() external {
+    function cancelAuction(uint256 auctionId) _activeAuction() nonReentrant() external {
         require(auctionId < lastAuctionId, "INVALID_AUCTION_ID");
         require(auctions[auctionId].user == msg.sender, "INVALID_USER");
         require(auctions[auctionId].validated, "NOT_VALIDATED_AUCTION");
@@ -143,13 +162,71 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
 
 
 
-    function resolveAuction() external {
+    function resolveAuction(uint256 numberToProcceed) external {
         // We need to decypher all the token allocation by the user
         require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
 
         // Request to decypher all the vote
-        
+        while (numberToProcceed > 0 && lastAuctionProccessed < lastAuctionId) {
+
+            // Process only valid auction
+            if (auctions[lastAuctionProccessed].validated) {
+
+                // euint256 eRequestedAmount;
+                // euint256 ePricePerUnit;
+                
+                uint256[] memory cts = new uint256[](2);
+                cts[0] = Gateway.toUint256(auctions[lastAuctionProccessed].eRequestedAmount);
+                cts[1] = Gateway.toUint256(auctions[lastAuctionProccessed].ePricePerUnit);
+                uint256 requestId = Gateway.requestDecryption(
+                    cts, 
+                    this._gateway_callback_decypher_auction.selector, 
+                    0, 
+                    block.timestamp + 100, 
+                    false
+                );
+
+                // FIXME: second time we are using it - Issue of overriting ??
+                // Map the request ID to the auction Id
+                decypherProcess[requestId] = lastAuctionId;
+
+            }
+
+            lastAuctionProccessed++;
+            numberToProcceed--;
+        }
     }
+
+
+    mapping (uint256 minPrice => uint256[]) orderedAuctionPerUser;
+
+    function _gateway_callback_decypher_auction(
+        uint256 requestId, 
+        uint256 requestedAmount, 
+        uint256 pricePerUnit
+    ) public onlyGateway {
+
+        // Get the auction id
+        uint256 auctionId = decypherProcess[requestId];
+
+        // FIXME :: Store decypher value
+
+        // Does the price already exists
+        if (orderedAuctionPerUser[pricePerUnit].length == 0) {
+            // Keep track of the price to iterate later on to asc order
+
+            
+        }
+
+        // Add the id to the matching value
+        orderedAuctionPerUser[pricePerUnit].push(auctionId);
+
+        
+        // auctions[decypherProcess[requestId]].totalValueLock = result;
+        // TODO: emit smth
+    }
+
+    
 
 
 }
