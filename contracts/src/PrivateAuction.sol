@@ -52,6 +52,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
     // 3. User validate the auction by paying the value
 
 
+    // FIXME: Do we need a min fix allocation to avoid flood
     function createAuction(
         einput eRequestedAmount, 
         einput ePricePerUnit,
@@ -199,6 +200,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
 
     // Keep unicity given a price and list of auction id
     mapping (uint256 minPrice => uint256[]) orderedAuctionPerUser;
+    uint256[] sortedMinPrice;
 
     function _gateway_callback_decypher_auction(
         uint256 requestId, 
@@ -214,7 +216,7 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
         // Does the price already exists
         if (orderedAuctionPerUser[pricePerUnit].length == 0) {
             // Keep track of the price to iterate later on to asc order
-            // 
+            
             
         }
 
