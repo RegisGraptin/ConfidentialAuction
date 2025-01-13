@@ -6,15 +6,23 @@ import "fhevm/gateway/GatewayCaller.sol";
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 
 import {IPrivateAuction, Auction} from "./interfaces/IPrivateAuction.sol";
 
 
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+
+import {BokkyPooBahsRedBlackTreeLibrary} from "./lib/BokkyPooBahsRedBlackTreeLibrary.sol";
 
 contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller, ReentrancyGuard {
+
+    using BokkyPooBahsRedBlackTreeLibrary for BokkyPooBahsRedBlackTreeLibrary.Tree;
+    BokkyPooBahsRedBlackTreeLibrary.Tree priceOrderTree;
 
     // Auction properties
     uint256 public lastAuctionId;
@@ -92,6 +100,8 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
             creationTime: block.timestamp,
             eRequestedAmount: eAmount,
             ePricePerUnit: ePrice,
+            dRequestedAmount: 0,
+            dPricePerUnit: 0,
             validated: false,
             totalValueLock: 0
         });
@@ -165,6 +175,8 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
     function resolveAuction(uint256 numberToProcceed) external {
         // We need to decypher all the token allocation by the user
         require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
+        require(lastAuctionProccessed < lastAuctionId, "PROCEED_ALL_DATA"); // TODO: Use it for last process
+
 
         // Request to decypher all the vote
         while (numberToProcceed > 0 && lastAuctionProccessed < lastAuctionId) {
@@ -198,11 +210,14 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
     }
 
 
+    // FIXME: How to know we can go to the next steps ? 
+    // Need a counter to validate them ??
+
     // Keep unicity given a price and list of auction id
     mapping (uint256 minPrice => uint256[]) orderedAuctionPerUser;
     uint256[] sortedMinPrice;
 
-    function _gateway_callback_decypher_auction(
+    function _gateway_callback_decypher_auction( // FIXME: name nomenclature
         uint256 requestId, 
         uint256 requestedAmount, 
         uint256 pricePerUnit
@@ -216,19 +231,90 @@ contract PrivateAuction is SepoliaZamaFHEVMConfig, ERC20, Ownable, GatewayCaller
         // Does the price already exists
         if (orderedAuctionPerUser[pricePerUnit].length == 0) {
             // Keep track of the price to iterate later on to asc order
-            
-            
+            priceOrderTree.insert(pricePerUnit);
         }
+
+        // Store decypher data
+        auctions[auctionId].dRequestedAmount = requestedAmount;
+        auctions[auctionId].dPricePerUnit = pricePerUnit;
 
         // Add the id to the matching value
         orderedAuctionPerUser[pricePerUnit].push(auctionId);
 
-        
-        // auctions[decypherProcess[requestId]].totalValueLock = result;
         // TODO: emit smth
     }
 
-    
+    function distributeToken(uint numberToProceed) external nonReentrant() {
 
+        while (
+            balanceOf(address(this)) > 0  // We still have token to distribute
+            && numberToProceed > 0
+            && priceOrderTree.root != 0  // We still have available auctions
+        ) {
+            // Get the better price 
+            uint256 keyPrice = priceOrderTree.last();
+
+            // Get the mapped auctions 
+            while (orderedAuctionPerUser[keyPrice].length > 0) {
+                if (numberToProceed == 0) { // Stop the process
+                    return;
+                }
+
+                // Get the last item and remove it
+                uint256 auctionId = orderedAuctionPerUser[keyPrice][orderedAuctionPerUser[keyPrice].length - 1];
+                orderedAuctionPerUser[keyPrice].pop();
+
+                // compute the token to send
+                uint256 tokenToSend = Math.min(
+                    balanceOf(address(this)),
+                    auctions[auctionId].dRequestedAmount * auctions[auctionId].dPricePerUnit
+                );
+
+                // Update the token paid value
+                auctions[auctionId].totalValueLock -= tokenToSend;
+
+                // Transfer to the user
+                _transfer(address(this), auctions[auctionId].user, tokenToSend);
+                
+
+                // We can stop if we have no more token to distribute
+                if (balanceOf(address(this)) == 0) {
+                    return;
+                }
+
+                numberToProceed--;
+            }
+
+            // No more auctions for this key price
+            // We can remove the price from our tree
+            priceOrderTree.remove(keyPrice);
+        }
+
+
+        // In the particular case where we have explored all the auctions
+        // And we still have tokens, we send them to the owner
+        
+        if (
+            balanceOf(address(this)) > 0
+            && priceOrderTree.root == 0
+        ) {
+            _transfer(address(this), this.owner(), balanceOf(address(this)));
+        }
+    }
+
+
+    function unlock(uint256 auctionId) nonReentrant() external {
+        require(balanceOf(address(this)) == 0, "STILL_TOKEN_UNDISTRIBUTED");
+        require(auctions[auctionId].user == msg.sender, "INVALID_USER");
+        require(auctions[auctionId].validated, "NOT_VALIDATED_AUCTION");
+        require(auctions[auctionId].totalValueLock > 0, "NO_MORE_TOKEN");
+
+        uint256 unlockAmount = auctions[auctionId].totalValueLock;
+
+        // TODO : Emit action 
+
+        (bool success, ) = msg.sender.call{value: unlockAmount}("");
+        require(success, "Refund failed");
+    }
 
 }

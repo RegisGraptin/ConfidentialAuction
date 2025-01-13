@@ -10,6 +10,8 @@ struct Auction {
     uint256 creationTime;
     euint256 eRequestedAmount;
     euint256 ePricePerUnit;
+    uint256 dRequestedAmount;
+    uint256 dPricePerUnit;
     bool validated;
     uint256 totalValueLock;
 }
