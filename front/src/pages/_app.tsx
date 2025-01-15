@@ -7,18 +7,21 @@ import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
 
 import { config } from '../wagmi';
+import Layout from './layout';
 
 const client = new QueryClient();
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={client}>
-        <RainbowKitProvider>
-          <Component {...pageProps} />
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={client}>
+          <RainbowKitProvider>
+          <Layout>
+              <Component {...pageProps} />
+              </Layout>  
+          </RainbowKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
   );
 }
 

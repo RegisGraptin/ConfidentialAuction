@@ -6,9 +6,17 @@ import styles from '../styles/Home.module.css';
 import PrivateAuction from "../abi/PrivateAuction.json";
 import { useReadContract } from 'wagmi';
 import { Address } from 'viem';
+import CreateAuctionForm from '../components/CreateAuctionForm';
+import React from 'react';
+import { createFHEInstance } from '../lib/fhe';
 
 const Home: NextPage = () => {
   
+  React.useEffect(() => {
+    createFHEInstance()
+  }, []);
+
+
   const { data: tokenName } = useReadContract({
     address: process.env.NEXT_PUBLIC_CONTRACT as Address,
     abi: PrivateAuction.abi,
@@ -27,6 +35,8 @@ const Home: NextPage = () => {
     return new Date(timestamps * 1000).toDateString();
   }
 
+  
+
   return (
     <div className={styles.container}>
       
@@ -42,6 +52,8 @@ const Home: NextPage = () => {
         <p className={styles.description}>
           {parseTimestampData(Number(endAuctionTime))}
         </p>
+
+        <CreateAuctionForm />
 
       </main>
 
