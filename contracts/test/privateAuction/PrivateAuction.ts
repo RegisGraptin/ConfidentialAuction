@@ -1,3 +1,4 @@
+import { mine } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { network } from "hardhat";
 import { ethers } from "hardhat";
@@ -37,7 +38,19 @@ describe("PrivateAuction", function () {
         inputs.inputProof,
       )
       await transaction.wait();
-    }
+    };
+
+    this.confirmAuction = async (requestAmount: number, pricePerToken: number) => {
+      // Be sure that the create auction decypher was done
+      await awaitAllDecryptionResults();
+      const total_value = requestAmount * pricePerToken;
+      const transaction = await this.contract.confirmAuction(0, {value: total_value});
+      await transaction.wait()
+    };
+
+    
+
+
 
 
   });
@@ -75,7 +88,7 @@ describe("PrivateAuction", function () {
     
     // Get the contract eth balance before
     const userEthBalanceBefore = await ethers.provider.getBalance(this.signers.alice.address);
-    const contractEthBalaceBefore = await ethers.provider.getBalance(this.contractAddress);
+    const contractEthBalanceBefore = await ethers.provider.getBalance(this.contractAddress);
 
     const total_value = 100_000n * 10_000n;
     const transaction = await this.contract.confirmAuction(0, {value: total_value});
@@ -88,7 +101,7 @@ describe("PrivateAuction", function () {
     const userEthBalanceAfter = await ethers.provider.getBalance(this.signers.alice.address);
     const contractEthBalaceAfter = await ethers.provider.getBalance(this.contractAddress);
 
-    expect(contractEthBalaceAfter).to.be.eq(contractEthBalaceBefore + total_value);
+    expect(contractEthBalaceAfter).to.be.eq(contractEthBalanceBefore + total_value);
     expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - total_value - gasUsed);
   });
 
@@ -105,7 +118,7 @@ describe("PrivateAuction", function () {
 
     // Get ETH balance
     const userEthBalanceBefore = await ethers.provider.getBalance(this.signers.alice.address);
-    const contractEthBalaceBefore = await ethers.provider.getBalance(this.contractAddress);
+    const contractEthBalanceBefore = await ethers.provider.getBalance(this.contractAddress);
 
     const total_value = 100_000n * 10_000n;
     const transaction = await this.contract.confirmAuction(0, {value: total_value + 100_000n});
@@ -117,9 +130,65 @@ describe("PrivateAuction", function () {
     const contractEthBalaceAfter = await ethers.provider.getBalance(this.contractAddress);
 
     // We should only have the total value in addition for the contract
-    expect(contractEthBalaceAfter).to.be.eq(contractEthBalaceBefore + total_value);
+    expect(contractEthBalaceAfter).to.be.eq(contractEthBalanceBefore + total_value);
     expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - total_value - gasUsed);
   });
+
+
+  it("check cancel auction", async function () {
+    await this.createAuction(this.signers.alice.address, 100_000n, 10_000n);
+    await this.confirmAuction(100_000n, 10_000n);
+    
+    const totalAmount = 100_000n * 10_000n;
+
+    const userEthBalanceBefore = await ethers.provider.getBalance(this.signers.alice.address);
+    const contractEthBalanceBefore = await ethers.provider.getBalance(this.contractAddress);
+    const transaction = await this.contract.cancelAuction(0);
+    const receipt = await transaction.wait();
+    const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
+    const userEthBalanceAfter = await ethers.provider.getBalance(this.signers.alice.address);
+    const contractEthBalaceAfter = await ethers.provider.getBalance(this.contractAddress);
+
+    // Check the auction state
+    const auction = await this.contract.auctions(0);
+    expect(auction[0]).to.be.eq(this.signers.alice.address);
+    expect(auction[6]).to.be.eq(false);
+    expect(auction[7]).to.be.eq(totalAmount);
+  
+    // Check the balance
+    expect(contractEthBalaceAfter).to.be.eq(contractEthBalanceBefore - totalAmount);
+    expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore + totalAmount - gasUsed);
+  });
+
+
+
+
+  it("check cancel auction", async function () {
+    await this.createAuction(this.signers.alice.address, 100_000n, 10_000n);
+    await this.confirmAuction(100_000n, 10_000n);
+
+    const totalAmount = 100_000n * 10_000n;
+
+    // Move to a week from now, to be able to resolve the auction
+    const targetTimestamp = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); 
+    await network.provider.send("evm_setNextBlockTimestamp", [targetTimestamp]);
+    await network.provider.send("evm_mine");
+    
+    const transaction = await this.contract.resolveAuction(1);
+    await transaction.wait();
+
+    await awaitAllDecryptionResults();
+
+    // All the auctions should now be decypher
+    const auction = await this.contract.auctions(0);
+    expect(auction[0]).to.be.eq(this.signers.alice.address);
+    expect(auction[4]).to.be.eq(100_000n);
+    expect(auction[5]).to.be.eq(10_000n);
+    expect(auction[6]).to.be.eq(true);
+    expect(auction[7]).to.be.eq(totalAmount);
+
+  });
+
 
 
 });

@@ -25,7 +25,7 @@ importers:
         specifier: ^3.0.0
         version: 3.0.8(ethers@6.13.4)(hardhat@2.22.18(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2))
       '@nomicfoundation/hardhat-network-helpers':
-        specifier: ^1.0.6
+        specifier: ^1.0.12
         version: 1.0.12(hardhat@2.22.18(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2))
       '@nomicfoundation/hardhat-toolbox':
         specifier: ^5.0.0

@@ -204,7 +204,7 @@ contract PrivateAuction is
 
                 // FIXME: second time we are using it - Issue of overriting ??
                 // Map the request ID to the auction Id
-                decypherProcess[requestId] = lastAuctionId;
+                decypherProcess[requestId] = lastAuctionProccessed;
             }
 
             lastAuctionProccessed++;
@@ -219,8 +219,9 @@ contract PrivateAuction is
     mapping(uint256 minPrice => uint256[]) orderedAuctionPerUser;
     uint256[] sortedMinPrice;
 
+
+    // FIXME: name nomenclature
     function gateway_callback_decypher_auction(
-        // FIXME: name nomenclature
         uint256 requestId,
         uint256 requestedAmount,
         uint256 pricePerUnit
@@ -230,15 +231,15 @@ contract PrivateAuction is
 
         // FIXME :: Store decypher value
 
+        // Store decypher data
+        auctions[auctionId].dRequestedAmount = requestedAmount;
+        auctions[auctionId].dPricePerUnit = pricePerUnit;
+
         // Does the price already exists
         if (orderedAuctionPerUser[pricePerUnit].length == 0) {
             // Keep track of the price to iterate later on to asc order
             priceOrderTree.insert(pricePerUnit);
         }
-
-        // Store decypher data
-        auctions[auctionId].dRequestedAmount = requestedAmount;
-        auctions[auctionId].dPricePerUnit = pricePerUnit;
 
         // Add the id to the matching value
         orderedAuctionPerUser[pricePerUnit].push(auctionId);
