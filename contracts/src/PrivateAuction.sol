@@ -247,7 +247,7 @@ contract PrivateAuction is
         // TODO: emit smth
     }
 
-    function distributeToken(uint numberToProceed) external nonReentrant {
+    function distributeToken(uint numberToProceed) external nonReentrant { // FIXME:: check condition
         while (
             balanceOf(address(this)) > 0 && // We still have token to distribute
             numberToProceed > 0 &&
@@ -272,12 +272,11 @@ contract PrivateAuction is
                 // compute the token to send
                 uint256 tokenToSend = Math.min(
                     balanceOf(address(this)),
-                    auctions[auctionId].dRequestedAmount *
-                        auctions[auctionId].dPricePerUnit
+                    auctions[auctionId].dRequestedAmount
                 );
 
                 // Update the token paid value
-                auctions[auctionId].totalValueLock -= tokenToSend;
+                auctions[auctionId].totalValueLock -= tokenToSend * auctions[auctionId].dPricePerUnit;
 
                 // Transfer to the user
                 _transfer(address(this), auctions[auctionId].user, tokenToSend);
@@ -310,6 +309,9 @@ contract PrivateAuction is
         require(auctions[auctionId].totalValueLock > 0, "NO_MORE_TOKEN");
 
         uint256 unlockAmount = auctions[auctionId].totalValueLock;
+        
+        // Update the value
+        auctions[auctionId].totalValueLock = 0;
 
         // TODO : Emit action
 

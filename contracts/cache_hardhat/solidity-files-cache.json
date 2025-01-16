@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/src/PrivateAuction.sol": {
-      "lastModificationDate": 1737012416548,
-      "contentHash": "40c69cfe5f8f6fbedc894947253c2b2f",
+      "lastModificationDate": 1737017147407,
+      "contentHash": "31b8eb7b7436c62a62462da9d3d6d125",
       "sourceName": "src/PrivateAuction.sol",
       "solcConfig": {
         "version": "0.8.24",
