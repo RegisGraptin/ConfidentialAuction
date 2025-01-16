@@ -46,7 +46,7 @@ contract PrivateAuction is
     ) ERC20(_name, _symbol) Ownable(msg.sender) {
         require(_endAuctionTime > block.timestamp, "INVALID_END_AUCTION_TIME");
         
-        _mint(msg.sender, _supply);
+        _mint(address(this), _supply);
         endAuctionTime = _endAuctionTime;
     }
 
@@ -65,15 +65,14 @@ contract PrivateAuction is
     function createAuction(
         einput eRequestedAmount,
         einput ePricePerUnit,
-        bytes calldata eRequestedAmountProof,
-        bytes calldata ePricePerUnitProof
+        bytes calldata inputProof
     ) external _activeAuction returns (uint256) {
         // Expect euint256 values
         euint256 eAmount = TFHE.asEuint256(
             eRequestedAmount,
-            eRequestedAmountProof
+            inputProof
         );
-        euint256 ePrice = TFHE.asEuint256(ePricePerUnit, ePricePerUnitProof);
+        euint256 ePrice = TFHE.asEuint256(ePricePerUnit, inputProof);
 
         // Allow the smart contract to decypher those data on the resolution time
         TFHE.allowThis(eAmount);
@@ -81,6 +80,7 @@ contract PrivateAuction is
 
         // Get the expected total amount to be paid
         euint256 eAmountToPay = TFHE.mul(eAmount, ePrice);
+        TFHE.allowThis(eAmountToPay);
 
         // Request to decypher the total amount to be able to verify user payment
 
@@ -88,7 +88,7 @@ contract PrivateAuction is
         cts[0] = Gateway.toUint256(eAmountToPay);
         uint256 requestId = Gateway.requestDecryption(
             cts,
-            this._gateway_callback_mul_value.selector,
+            this.gateway_decypher_total_value.selector,
             0,
             block.timestamp + 100,
             false
@@ -116,10 +116,10 @@ contract PrivateAuction is
         return lastAuctionId - 1;
     }
 
-    function _gateway_callback_mul_value(
+    function gateway_decypher_total_value(
         uint256 requestId,
         uint256 result
-    ) public onlyGateway {
+    ) external onlyGateway { // Public ??
         auctions[decypherProcess[requestId]].totalValueLock = result;
         // TODO: emit smth
     }
@@ -198,7 +198,7 @@ contract PrivateAuction is
                 );
                 uint256 requestId = Gateway.requestDecryption(
                     cts,
-                    this._gateway_callback_decypher_auction.selector,
+                    this.gateway_callback_decypher_auction.selector,
                     0,
                     block.timestamp + 100,
                     false
@@ -221,7 +221,7 @@ contract PrivateAuction is
     mapping(uint256 minPrice => uint256[]) orderedAuctionPerUser;
     uint256[] sortedMinPrice;
 
-    function _gateway_callback_decypher_auction(
+    function gateway_callback_decypher_auction(
         // FIXME: name nomenclature
         uint256 requestId,
         uint256 requestedAmount,
