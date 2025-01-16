@@ -10,6 +10,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
+import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
 
 import {IPrivateAuction, Auction} from "./interfaces/IPrivateAuction.sol";
 
@@ -17,6 +18,7 @@ import {BokkyPooBahsRedBlackTreeLibrary} from "./lib/BokkyPooBahsRedBlackTreeLib
 
 contract PrivateAuction is
     SepoliaZamaFHEVMConfig,
+    SepoliaZamaGatewayConfig,
     ERC20,
     Ownable,
     GatewayCaller,
@@ -68,10 +70,7 @@ contract PrivateAuction is
         bytes calldata inputProof
     ) external _activeAuction returns (uint256) {
         // Expect euint256 values
-        euint256 eAmount = TFHE.asEuint256(
-            eRequestedAmount,
-            inputProof
-        );
+        euint256 eAmount = TFHE.asEuint256(eRequestedAmount, inputProof);
         euint256 ePrice = TFHE.asEuint256(ePricePerUnit, inputProof);
 
         // Allow the smart contract to decypher those data on the resolution time
@@ -119,12 +118,11 @@ contract PrivateAuction is
     function gateway_decypher_total_value(
         uint256 requestId,
         uint256 result
-    ) external onlyGateway { // Public ??
+    ) public onlyGateway { // Public ??
         auctions[decypherProcess[requestId]].totalValueLock = result;
         // TODO: emit smth
     }
 
-    // FIXME: Use reentrancy guard
     function confirmAuction(
         uint256 auctionId
     ) external payable _activeAuction nonReentrant {

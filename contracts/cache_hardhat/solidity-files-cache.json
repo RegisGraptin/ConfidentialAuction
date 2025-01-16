@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/src/PrivateAuction.sol": {
-      "lastModificationDate": 1736767552212,
-      "contentHash": "40d7225e8a9446f2e4b790b8b5aff874",
+      "lastModificationDate": 1737002269136,
+      "contentHash": "579505e12950ae6b997e4a5bedae5b60",
       "sourceName": "src/PrivateAuction.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -45,6 +45,7 @@
         "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
         "@openzeppelin/contracts/utils/math/Math.sol",
         "fhevm/config/ZamaFHEVMConfig.sol",
+        "fhevm/config/ZamaGatewayConfig.sol",
         "./interfaces/IPrivateAuction.sol",
         "./lib/BokkyPooBahsRedBlackTreeLibrary.sol"
       ],
@@ -145,6 +146,53 @@
         "BokkyPooBahsRedBlackTreeLibrary"
       ]
     },
+    "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/fhevm/gateway/GatewayCaller.sol": {
+      "lastModificationDate": 1736676351984,
+      "contentHash": "61275e485ac8d9b68a66cc4c5b571bc1",
+      "sourceName": "fhevm/gateway/GatewayCaller.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "metadata": {
+            "bytecodeHash": "none",
+            "useLiteralContent": true
+          },
+          "optimizer": {
+            "enabled": true,
+            "runs": 800
+          },
+          "evmVersion": "cancun",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../lib/TFHE.sol",
+        "./lib/Gateway.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "GatewayCaller"
+      ]
+    },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/fhevm/config/ZamaFHEVMConfig.sol": {
       "lastModificationDate": 1736676351980,
       "contentHash": "2b99c2f099c9ee96f76dec9acff7d320",
@@ -194,53 +242,6 @@
         "ZamaFHEVMConfig"
       ]
     },
-    "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/fhevm/gateway/GatewayCaller.sol": {
-      "lastModificationDate": 1736676351984,
-      "contentHash": "61275e485ac8d9b68a66cc4c5b571bc1",
-      "sourceName": "fhevm/gateway/GatewayCaller.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "metadata": {
-            "bytecodeHash": "none",
-            "useLiteralContent": true
-          },
-          "optimizer": {
-            "enabled": true,
-            "runs": 800
-          },
-          "evmVersion": "cancun",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "../lib/TFHE.sol",
-        "./lib/Gateway.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.24"
-      ],
-      "artifacts": [
-        "GatewayCaller"
-      ]
-    },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/fhevm/lib/TFHE.sol": {
       "lastModificationDate": 1736681369868,
       "contentHash": "5e1b4ee3a4cc167d6f59a3e72db2a7f9",
@@ -288,6 +289,50 @@
         "TFHE"
       ]
     },
+    "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol": {
+      "lastModificationDate": 1736677492285,
+      "contentHash": "190613e556d509d9e9a0ea43dc5d891d",
+      "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "metadata": {
+            "bytecodeHash": "none",
+            "useLiteralContent": true
+          },
+          "optimizer": {
+            "enabled": true,
+            "runs": 800
+          },
+          "evmVersion": "cancun",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ReentrancyGuard"
+      ]
+    },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/openzeppelin-contracts/contracts/access/Ownable.sol": {
       "lastModificationDate": 1736677492273,
       "contentHash": "d3c790edc9ccf808a17c5a6cd13614fd",
@@ -332,50 +377,6 @@
       ],
       "artifacts": [
         "Ownable"
-      ]
-    },
-    "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol": {
-      "lastModificationDate": 1736677492285,
-      "contentHash": "190613e556d509d9e9a0ea43dc5d891d",
-      "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "metadata": {
-            "bytecodeHash": "none",
-            "useLiteralContent": true
-          },
-          "optimizer": {
-            "enabled": true,
-            "runs": 800
-          },
-          "evmVersion": "cancun",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "ReentrancyGuard"
       ]
     },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol": {
