@@ -191,21 +191,19 @@ contract ConfidentialAuction is
         }
     }
 
-    /// @dev process descending order to sort and order the price per bid
     function resolveAuction(uint256 numberToProcceed) external override {
         if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
         if (_pendingGatewayItems > 0) revert PendingGatewayProcess();
         if (lastBidProcessed >= nextBidId) revert AllBidsProcessed();
 
-        // decrypt process needs to be done backward (lastBid to 0)
-        // In order to sort during the gateway decrypt process
-
         // Request to decrypt all the vote
         while (numberToProcceed > 0 && lastBidProcessed < nextBidId) {
+            
             // Process only confirmed bid
             uint256 index = nextBidId - lastBidProcessed - 1;
             if (_bids[index].confirmed) {
-                // Decrypt the bid parameter
+                
+                // Decrypt bid parameters
                 uint256[] memory cts = new uint256[](2);
                 cts[0] = Gateway.toUint256(_bids[index].eRequestedAmount);
                 cts[1] = Gateway.toUint256(_bids[index].ePricePerUnit);
@@ -218,7 +216,7 @@ contract ConfidentialAuction is
                 );
                 _pendingGatewayItems++;
 
-                // Map the request ID to the auction Id
+                // Map the request ID to the bid Id
                 _gatewayProcess[requestId] = index;
             }
 
@@ -227,32 +225,34 @@ contract ConfidentialAuction is
         }
     }
 
-    // FIXME:: check condition
     function distributeToken(uint256 numberToProceed) external override nonReentrant {
         if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
         if (_pendingGatewayItems > 0) revert PendingGatewayProcess();
         if (lastBidProcessed < nextBidId) revert PendingBidsToProcess();
         
         while (
-            balanceOf(address(this)) > 0 && // We still have token to distribute
-            numberToProceed > 0 &&
-            _priceOrderTree.root != 0 // We still have available bids
+            numberToProceed > 0 
+            && balanceOf(address(this)) > 0 // We still have token to distribute
+            && _priceOrderTree.root != 0    // We still have available bids
         ) {
-            // Get the better price
+            // Get the last descending price
             uint256 keyPrice = _priceOrderTree.last();
 
-            // Get the mapped bids
-            while (_orderedAuctionPerUser[keyPrice].length > 0) {
-                if (numberToProceed == 0) {
-                    // Stop the process
+            // Get associated bids for this price
+            while (
+                balanceOf(address(this)) > 0
+                && _orderedAuctionPerUser[keyPrice].length > 0
+            ) {
+                if (numberToProceed == 0) {  // Stop the process
                     return;
                 }
 
                 // Get the last item and remove it
-                uint256 bidId = _orderedAuctionPerUser[keyPrice][_orderedAuctionPerUser[keyPrice].length - 1];
+                uint256 lastIndex = _orderedAuctionPerUser[keyPrice].length - 1;
+                uint256 bidId = _orderedAuctionPerUser[keyPrice][lastIndex];
                 _orderedAuctionPerUser[keyPrice].pop();
 
-                // compute the token to send
+                // Compute the number of token to send
                 uint256 tokenToSend = Math.min(balanceOf(address(this)), _bids[bidId].dRequestedAmount);
 
                 uint256 ethValue = tokenToSend * _bids[bidId].dPricePerUnit;
@@ -269,26 +269,23 @@ contract ConfidentialAuction is
                 // Transfer to the user
                 _transfer(address(this), _bids[bidId].user, tokenToSend);
 
-                // We can stop if we have no more token to distribute
-                if (balanceOf(address(this)) == 0) {
-                    return;
-                }
-
                 numberToProceed--;
             }
 
-            // No more bids for this key price
+            // No more bids for this price
             // We can remove the price from our tree
             _priceOrderTree.remove(keyPrice);
         }
 
         // In the particular case where we have explored all the bids
-        // And we still have tokens, we send them to the owner
-
-        if (balanceOf(address(this)) > 0 && _priceOrderTree.root == 0) {
+        // but we still have tokens, we send them to the owner.
+        if (
+            numberToProceed > 0 
+            && balanceOf(address(this)) > 0 // We still have token to distribute
+            && _priceOrderTree.root == 0
+        ) {
+            emit AuctionTokenTransferred(this.owner(), balanceOf(address(this)));
             _transfer(address(this), this.owner(), balanceOf(address(this)));
-
-            // FIXME: Need to transfer to the user the fund collected
         }
     }
 

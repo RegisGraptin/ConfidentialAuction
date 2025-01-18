@@ -141,7 +141,7 @@ interface IConfidentialAuction {
     /// @notice Resolves the auction by processing and decrypting bids in steps.
     /// @dev This function is called after the auction has ended. It processes a specified
     ///      number of bids per call to prevent running out of gas in case of a large number
-    ///      of bids. 
+    ///      of bids to proceed.
     /// @param numberToProcceed The maximum number of bids to process in this call.
     /// @custom:requirements
     /// - The auction must have ended (based on the auction's timestamp).
