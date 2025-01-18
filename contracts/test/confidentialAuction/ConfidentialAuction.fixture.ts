@@ -1,15 +1,15 @@
 import { ethers, network } from "hardhat";
 
-import type { PrivateAuction } from "../../types";
+import type { ConfidentialAuction } from "../../types";
 import { getSigners } from "../signers";
 
-export async function deployPrivateAuctionFixture(): Promise<PrivateAuction> {
+export async function deployConfidentialAuctionFixture(): Promise<ConfidentialAuction> {
   const signers = await getSigners();
 
   let blockTimestamp = (await ethers.provider.getBlock('latest'))!.timestamp;
   blockTimestamp += 7 * 24 * 60 * 60;
 
-  const contractFactory = await ethers.getContractFactory("PrivateAuction");
+  const contractFactory = await ethers.getContractFactory("ConfidentialAuction");
 
   const contract = await contractFactory
     .connect(signers.alice)

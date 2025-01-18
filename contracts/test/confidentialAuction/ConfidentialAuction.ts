@@ -1,19 +1,17 @@
-import { mine } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { network } from "hardhat";
 import { ethers } from "hardhat";
 
 import { createInstance } from "../instance";
-import { reencryptEuint64 } from "../reencrypt";
 import { getSigners, initSigners } from "../signers";
 import { debug } from "../utils";
-import { deployPrivateAuctionFixture } from "./PrivateAuction.fixture";
+import { deployConfidentialAuctionFixture } from "./ConfidentialAuction.fixture";
 import { awaitAllDecryptionResults, initGateway } from "../asyncDecrypt";
 import { assert } from "console";
 import { Signer } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
-describe("PrivateAuction", function () {
+describe("ConfidentialAuction", function () {
   before(async function () {
     await initGateway();
     await initSigners();
@@ -21,20 +19,20 @@ describe("PrivateAuction", function () {
   });
 
   beforeEach(async function () {
-    const contract = await deployPrivateAuctionFixture();
+    const contract = await deployConfidentialAuctionFixture();
     this.contractAddress = await contract.getAddress();
     this.contract = contract;
     this.fhevm = await createInstance();
 
     // Create helper function
-    this.createAuction = async (signer: HardhatEthersSigner, requestAmount: number, pricePerToken: number) => {
+    this.submitEncryptedBid = async (signer: HardhatEthersSigner, requestAmount: number, pricePerToken: number) => {
       const input = this.fhevm.createEncryptedInput(this.contractAddress, signer.address);
       // (requestAmount, pricePerUnit)
       const inputs = await input.add256(requestAmount).add256(pricePerToken).encrypt();
   
       // Create a new auction
-      // ["createAuction(bytes32,bytes32,bytes)"]
-      const transaction = await this.contract.connect(signer).createAuction(
+      // ["submitEncryptedBid(bytes32,bytes32,bytes)"]
+      const transaction = await this.contract.connect(signer).submitEncryptedBid(
         inputs.handles[0],
         inputs.handles[1],
         inputs.inputProof,
@@ -42,19 +40,19 @@ describe("PrivateAuction", function () {
       await transaction.wait();
     };
 
-    this.confirmAuction = async (signer: Signer, auctionId: number, requestAmount: number, pricePerToken: number) => {
+    this.confirmBid = async (signer: Signer, bidId: number, requestAmount: number, pricePerToken: number) => {
       // Be sure that the create auction decypher was done
       await awaitAllDecryptionResults();
       const total_value = requestAmount * pricePerToken;
-      const transaction = await this.contract.connect(signer).confirmAuction(auctionId, {value: BigInt(total_value)});
+      const transaction = await this.contract.connect(signer).confirmBid(bidId, {value: BigInt(total_value)});
       await transaction.wait()
     };
 
 
-    this.resolveAuction = async (numberOfAuctions: number | undefined) => {
+    this.resolveAuction = async (numberOfBids: number | undefined) => {
       // In case the number of auctions is not defined, we set a large number to process all of them
-      if (numberOfAuctions === undefined) {
-        numberOfAuctions = 1_000_000;
+      if (numberOfBids === undefined) {
+        numberOfBids = 1_000_000;
       }
 
       // Move to a week from now, to be able to resolve the auction
@@ -62,7 +60,7 @@ describe("PrivateAuction", function () {
       await network.provider.send("evm_setNextBlockTimestamp", [Number(targetTimestamp)]);
       await network.provider.send("evm_mine");
       
-      const transaction = await this.contract.resolveAuction(numberOfAuctions);
+      const transaction = await this.contract.resolveAuction(numberOfBids);
       await transaction.wait();
 
       await awaitAllDecryptionResults();
@@ -79,12 +77,12 @@ describe("PrivateAuction", function () {
 
   it("should create auction", async function () {
     
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     // Wait for decryption
     await awaitAllDecryptionResults();
 
     // We expect the auction id to be 0
-    const auction = await this.contract.auctions(0);
+    const auction = await this.contract.bids(0);
     // console.log(auction);
 
     expect(auction[0]).to.be.eq(this.signers.alice.address);
@@ -93,13 +91,13 @@ describe("PrivateAuction", function () {
   });
 
   it("should revert cancel invalid auction", async function () {
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
-    await expect(this.contract.cancelAuction(0)).to.be.reverted;
+    await expect(this.contract.cancelBid(0)).to.be.reverted;
   });
 
   it("should fund the auction and validate it", async function () {
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
     
     // Get the contract eth balance before
@@ -107,7 +105,7 @@ describe("PrivateAuction", function () {
     const contractEthBalanceBefore = await ethers.provider.getBalance(this.contractAddress);
 
     const total_value = 100_000n * 10_000n;
-    const transaction = await this.contract.confirmAuction(0, {value: total_value});
+    const transaction = await this.contract.confirmBid(0, {value: total_value});
     const receipt = await transaction.wait()
 
     // We also need to take into consideration the gas used to check the user spending
@@ -122,14 +120,14 @@ describe("PrivateAuction", function () {
   });
 
   it("fund with not enough funds", async function () {
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
-    await expect(this.contract.confirmAuction(0)).to.be.reverted;
-    await expect(this.contract.confirmAuction(0, {value: 1})).to.be.reverted;
+    await expect(this.contract.confirmBid(0)).to.be.reverted;
+    await expect(this.contract.confirmBid(0, {value: 1})).to.be.reverted;
   });
 
   it("fund back user if too much eth", async function () {
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
 
     // Get ETH balance
@@ -137,7 +135,7 @@ describe("PrivateAuction", function () {
     const contractEthBalanceBefore = await ethers.provider.getBalance(this.contractAddress);
 
     const total_value = 100_000n * 10_000n;
-    const transaction = await this.contract.confirmAuction(0, {value: total_value + 100_000n});
+    const transaction = await this.contract.confirmBid(0, {value: total_value + 100_000n});
     const receipt = await transaction.wait()
 
     const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
@@ -152,21 +150,21 @@ describe("PrivateAuction", function () {
 
 
   it("check cancel auction", async function () {
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
-    await this.confirmAuction(this.signers.alice, 0, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
+    await this.confirmBid(this.signers.alice, 0, 100_000n, 10_000n);
     
     const totalAmount = 100_000n * 10_000n;
 
     const userEthBalanceBefore = await ethers.provider.getBalance(this.signers.alice.address);
     const contractEthBalanceBefore = await ethers.provider.getBalance(this.contractAddress);
-    const transaction = await this.contract.cancelAuction(0);
+    const transaction = await this.contract.cancelBid(0);
     const receipt = await transaction.wait();
     const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
     const userEthBalanceAfter = await ethers.provider.getBalance(this.signers.alice.address);
     const contractEthBalaceAfter = await ethers.provider.getBalance(this.contractAddress);
 
     // Check the auction state
-    const auction = await this.contract.auctions(0);
+    const auction = await this.contract.bids(0);
     expect(auction[0]).to.be.eq(this.signers.alice.address);
     expect(auction[6]).to.be.eq(false);
     expect(auction[7]).to.be.eq(totalAmount);
@@ -180,8 +178,8 @@ describe("PrivateAuction", function () {
 
 
   it("check cancel auction", async function () {
-    await this.createAuction(this.signers.alice, 100_000n, 10_000n);
-    await this.confirmAuction(this.signers.alice, 0, 100_000n, 10_000n);
+    await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
+    await this.confirmBid(this.signers.alice, 0, 100_000n, 10_000n);
 
     const totalAmount = 100_000n * 10_000n;
 
@@ -189,7 +187,7 @@ describe("PrivateAuction", function () {
     await this.resolveAuction(1);
 
     // All the auctions should now be decypher
-    const auction = await this.contract.auctions(0);
+    const auction = await this.contract.bids(0);
     expect(auction[0]).to.be.eq(this.signers.alice.address);
     expect(auction[4]).to.be.eq(100_000n);
     expect(auction[5]).to.be.eq(10_000n);
@@ -235,11 +233,11 @@ describe("PrivateAuction", function () {
       new ConfigUser({name: "dave", requestAmount: 1_000_000, pricePerToken: 10_000_000, expectedAllocation: 0}),
     ]
 
-    let auctionId = 0
+    let bidId = 0
     for (let user of config) {
-      await this.createAuction(this.signers[user.name], user["requestAmount"], user["pricePerToken"]);
-      await this.confirmAuction(this.signers[user.name], auctionId, user["requestAmount"], user["pricePerToken"]);
-      auctionId++;
+      await this.submitEncryptedBid(this.signers[user.name], user["requestAmount"], user["pricePerToken"]);
+      await this.confirmBid(this.signers[user.name], bidId, user["requestAmount"], user["pricePerToken"]);
+      bidId++;
     }
 
     // Step in the future and resolve all the auctions
@@ -257,7 +255,7 @@ describe("PrivateAuction", function () {
     };
 
     // Check user payback 
-    auctionId = 0
+    bidId = 0
     for (let user of config) {
       let payBackAmount = user.getExpectedEthBack();
       let userAddress = this.signers[user.name].address;
@@ -267,7 +265,7 @@ describe("PrivateAuction", function () {
         // We should get back the original tokens
         const userEthBalanceBefore = await ethers.provider.getBalance(userAddress);
 
-        const transaction =  await userWallet.unlock(auctionId);
+        const transaction =  await userWallet.refundUnsuccessfulBids(bidId);
         const receipt = await transaction.wait();
 
         const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
@@ -277,10 +275,10 @@ describe("PrivateAuction", function () {
 
       } else {
         // the transaction should revert has we have no more token available
-        await expect(userWallet.unlock(auctionId)).to.be.reverted;
+        await expect(userWallet.refundUnsuccessfulBids(bidId)).to.be.reverted;
       }
       
-      auctionId++;
+      bidId++;
     }
 
     // TODO: Check alice allocation
