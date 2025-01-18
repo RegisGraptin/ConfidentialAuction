@@ -36,9 +36,28 @@ interface IConfidentialAuction {
     /// @return An array of bid IDs representing the bids placed by the specified user.
     function userBids(address user) external view returns (uint256[] memory);
 
-    // The Auction time is finished
-    error FinishedAuctionError();
 
+    error AuctionAlreadyFinished();
+    error AuctionNotFinished();
+    error InvalidEndAuctionTime(uint256 providedEndTime, uint256 currentTime);
+    
+    error InvalidBidId(uint256 providedBidId, uint256 nextBidId);
+    error BidAlreadyConfirmed(uint256 bidId);
+    error BidNotConfirmed(uint256 bidId);
+    
+    error GatewayProcessRequired(uint256 bidId, uint256 totalValueLock);
+    error PendingGatewayProcess();
+    
+    error AllBidsProcessed();
+    error PendingBidsToProcess();
+    
+    error NoTokensLocked();
+    error ETHAlreadyClaimed();
+    error RemainingTokensToDistribute();
+    
+    error UnauthorizedUser(address providedUser, address expectedUser);
+    error InsufficientFunds(address user, uint256 requiredAmount, uint256 providedAmount);
+    
 
     event BidSubmitted(
         address indexed bidder, // The address of the bidder.
@@ -70,7 +89,7 @@ interface IConfidentialAuction {
 
     event GatewayTotalValueRequested(
         uint256 indexed bidId,  // The unique identifier of the bid.
-        uint256 amount,         // Total amount needed to be lock by the user to confirm his bid.
+        uint256 amount          // Total amount needed to be lock by the user to confirm his bid.
     );
 
     event GatewayDecryptBid(

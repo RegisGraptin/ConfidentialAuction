@@ -16,10 +16,9 @@ import { BokkyPooBahsRedBlackTreeLibrary } from "./lib/BokkyPooBahsRedBlackTreeL
 
 import { IConfidentialAuction, Bid } from "./interfaces/IConfidentialAuction.sol";
 
-
 /// @title Confidential Auction Smart Contract
 /// @dev This contract manages a confidential auction process, where bids are encrypted, decrypted, and evaluated.
-///      The auction follows a sealed-bid model with encrypted bids. It integrates with a FHE mechanism using 
+///      The auction follows a sealed-bid model with encrypted bids. It integrates with a FHE mechanism using
 ///      Zama's fhEVM
 contract ConfidentialAuction is
     SepoliaZamaFHEVMConfig,
@@ -30,7 +29,6 @@ contract ConfidentialAuction is
     ReentrancyGuard,
     IConfidentialAuction
 {
-    
     /// @notice The ID of the most recent bid
     uint256 public nextBidId;
 
@@ -40,12 +38,12 @@ contract ConfidentialAuction is
     /// @notice The last processed bid ID (used for managing bid resolution)
     uint256 public lastBidProcessed;
 
-    /// @notice Number of items that are pending to be processed by the ZAMA Gateway 
+    /// @notice Number of items that are pending to be processed by the ZAMA Gateway
     uint256 private _pendingGatewayItems;
 
     /// @notice Total amount of ETH raised during the auction
     uint256 public totalEthFromSale;
-    
+
     /// @notice Indicates whether the owner has claimed the ETH after the auction sale.
     bool public ethClaimedAfterSell;
 
@@ -62,18 +60,17 @@ contract ConfidentialAuction is
     mapping(uint256 price => uint256[] bidIds) internal _orderedAuctionPerUser;
 
     /// @dev This contract uses the BokkyPooBahsRedBlackTreeLibrary to efficiently manage and order price of the bid.
-    ///      It will help us during the resolution where we can have the price sorted and resolve the bid accordingly. 
+    ///      It will help us during the resolution where we can have the price sorted and resolve the bid accordingly.
 
     /// @dev This contract uses the BokkyPooBahsRedBlackTreeLibrary to efficiently manage and order the prices of bids.
     using BokkyPooBahsRedBlackTreeLibrary for BokkyPooBahsRedBlackTreeLibrary.Tree;
     BokkyPooBahsRedBlackTreeLibrary.Tree internal _priceOrderTree;
 
-
     //////////////////////////////////////////////////////////////////
     /// View functions
     //////////////////////////////////////////////////////////////////
 
-    function bids(uint256 bidId) external view returns(Bid memory) {
+    function bids(uint256 bidId) external view returns (Bid memory) {
         return _bids[bidId];
     }
 
@@ -81,22 +78,22 @@ contract ConfidentialAuction is
         return _userBids[user];
     }
 
-
     constructor(
         string memory _name,
         string memory _symbol,
         uint256 _supply,
         uint256 _endAuctionTime
     ) ERC20(_name, _symbol) Ownable(msg.sender) {
-        require(_endAuctionTime > block.timestamp, "INVALID_END_AUCTION_TIME");
-
+        if (_endAuctionTime <= block.timestamp) {
+            revert InvalidEndAuctionTime(_endAuctionTime, block.timestamp);
+        }
         _mint(address(this), _supply);
         endAuctionTime = _endAuctionTime;
     }
 
     modifier activeAuction() {
         if (block.timestamp >= endAuctionTime) {
-            revert FinishedAuctionError();
+            revert AuctionAlreadyFinished();
         }
         _;
     }
@@ -104,7 +101,6 @@ contract ConfidentialAuction is
     /// @inheritdoc IConfidentialAuction
     /// @dev We allow the contract to request future decryption of the encrypted parameters.
     ///      At this phase, only the total value amount derived from the input bid will be decrypted.
-    /// 
     function submitEncryptedBid(
         einput eRequestedAmount,
         einput ePricePerUnit,
@@ -158,19 +154,16 @@ contract ConfidentialAuction is
         return nextBidId - 1;
     }
 
+    function confirmBid(uint256 bidId) external payable override activeAuction nonReentrant {
+        if (bidId >= nextBidId) revert InvalidBidId(bidId, nextBidId);
+        if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
+        if (_bids[bidId].confirmed) revert BidAlreadyConfirmed(bidId);
+        if (_bids[bidId].totalValueLock == 0) revert GatewayProcessRequired(bidId, _bids[bidId].totalValueLock);
+        if (msg.value < _bids[bidId].totalValueLock) {
+            revert InsufficientFunds(msg.sender, _bids[bidId].totalValueLock, msg.value);
+        }
 
-    function confirmBid(uint256 bidId) external payable activeAuction nonReentrant {
-        require(bidId < nextBidId, "INVALID_BID");
-        require(_bids[bidId].user == msg.sender, "INVALID_USER");
-        require(!_bids[bidId].confirmed, "ALREADY_CONFIRMED");
-
-        // We should know how much eth the user has to pay
-        require(_bids[bidId].totalValueLock > 0, "NEED_GATEWAY_PROCESS");
-
-        // We should have enough token
-        require(msg.value >= _bids[bidId].totalValueLock, "NOT_ENOUGH_FUNDS");
-
-        // Validate the auction
+        // Confirm the bid
         _bids[bidId].confirmed = true;
         emit BidConfirmed(msg.sender, bidId, _bids[bidId].totalValueLock);
 
@@ -183,15 +176,12 @@ contract ConfidentialAuction is
     }
 
     function cancelBid(uint256 bidId) external override activeAuction nonReentrant {
-        require(bidId < nextBidId, "INVALID_BID");
-        require(_bids[bidId].user == msg.sender, "INVALID_USER");
-        require(_bids[bidId].confirmed, "NOT_confirmed_AUCTION");
+        if (bidId >= nextBidId) revert InvalidBidId(bidId, nextBidId);
+        if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
+        if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
 
         uint256 value = _bids[bidId].totalValueLock;
         _bids[bidId].confirmed = false;
-
-        // TODO: Delete is not possible, as we have two mapping one for decrypt the total amount
-        // Before being able to pay. This will be an issue, if someone is able to mix the auction value.
 
         emit BidCanceled(_bids[bidId].user, bidId, value);
 
@@ -201,14 +191,14 @@ contract ConfidentialAuction is
         }
     }
 
+    /// @dev process descending order to sort and order the price per bid
     function resolveAuction(uint256 numberToProcceed) external override {
-        // We need to decrypt all the token allocation by the user
-        require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
-        require(lastBidProcessed < nextBidId, "PROCEED_ALL_DATA"); // TODO: Use it for last process
-        require(_pendingGatewayItems == 0, "UNFINISHED_GATEWAY_PROCESS");
+        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        if (_pendingGatewayItems > 0) revert PendingGatewayProcess();
+        if (lastBidProcessed >= nextBidId) revert AllBidsProcessed();
 
         // decrypt process needs to be done backward (lastBid to 0)
-        // In order to sort during the gateway decrypt process 
+        // In order to sort during the gateway decrypt process
 
         // Request to decrypt all the vote
         while (numberToProcceed > 0 && lastBidProcessed < nextBidId) {
@@ -237,15 +227,12 @@ contract ConfidentialAuction is
         }
     }
 
-    
-
     // FIXME:: check condition
     function distributeToken(uint256 numberToProceed) external override nonReentrant {
-        require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
-        require(lastBidProcessed >= nextBidId, "PROCEED_ALL_DATA");
-        require(_pendingGatewayItems == 0, "UNFINISHED_GATEWAY_PROCESS");
-
-
+        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        if (_pendingGatewayItems > 0) revert PendingGatewayProcess();
+        if (lastBidProcessed < nextBidId) revert PendingBidsToProcess();
+        
         while (
             balanceOf(address(this)) > 0 && // We still have token to distribute
             numberToProceed > 0 &&
@@ -262,9 +249,7 @@ contract ConfidentialAuction is
                 }
 
                 // Get the last item and remove it
-                uint256 bidId = _orderedAuctionPerUser[keyPrice][
-                    _orderedAuctionPerUser[keyPrice].length - 1
-                ];
+                uint256 bidId = _orderedAuctionPerUser[keyPrice][_orderedAuctionPerUser[keyPrice].length - 1];
                 _orderedAuctionPerUser[keyPrice].pop();
 
                 // compute the token to send
@@ -308,10 +293,10 @@ contract ConfidentialAuction is
     }
 
     function claimETHToken() public onlyOwner nonReentrant {
-        require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
-        require(balanceOf(address(this)) == 0, "STILL_TOKEN_TO_DISTRIBUTE");
-        require(!ethClaimedAfterSell, "ALREADY_CLAIMED");
-        
+        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
+        if (ethClaimedAfterSell) revert ETHAlreadyClaimed();
+
         ethClaimedAfterSell = true;
 
         (bool success, ) = msg.sender.call{ value: totalEthFromSale }("");
@@ -319,13 +304,13 @@ contract ConfidentialAuction is
     }
 
     function refundUnsuccessfulBids(uint256 bidId) external override nonReentrant {
-        require(balanceOf(address(this)) == 0, "STILL_TOKEN_UNDISTRIBUTED");
-        require(_bids[bidId].user == msg.sender, "INVALID_USER");
-        require(_bids[bidId].confirmed, "INVALID_BID");
-        require(_bids[bidId].totalValueLock > 0, "NO_MORE_TOKEN");
-
-        uint256 unlockAmount = _bids[bidId].totalValueLock;
+        if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
+        if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
+        if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
+        if (_bids[bidId].totalValueLock == 0) revert NoTokensLocked();
         
+        uint256 unlockAmount = _bids[bidId].totalValueLock;
+
         // Update the value
         _bids[bidId].totalValueLock = 0;
 
@@ -373,5 +358,4 @@ contract ConfidentialAuction is
         delete _gatewayProcess[requestId];
         emit GatewayDecryptBid(bidId, requestedAmount, pricePerUnit);
     }
-
 }
