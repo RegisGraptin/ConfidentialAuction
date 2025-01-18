@@ -1,6 +1,6 @@
 source .env
 
-forge script script/PrivateAuction.s.sol:PrivateAuctionScript \
+forge script script/ConfidentialAuction.s.sol:ConfidentialAuctionScript \
   --rpc-url $SEPOLIA_RPC_URL \
   --private-key $PRIVATE_KEY \
   --verify \

@@ -12,20 +12,24 @@ struct Bid {
     euint256 ePricePerUnit;
     uint256 dRequestedAmount;
     uint256 dPricePerUnit;
-    bool validated;
+    bool confirmed;
     uint256 totalValueLock;
 }
 
 interface IConfidentialAuction {
     
     /// Views
+    function lastBidId() external view returns(uint256);
 
-    // // End time of the auction
-    // function endAuctionTime() external view returns(uint256);
+    function endAuctionTime() external view returns(uint256);
 
-    // // See the existing auctions
-    // function auctions(address user) external view returns(Bid memory);
+    function bids(uint256 bidId) external view returns(Bid memory);
+    
+    function userBids(address user) external view returns (uint256[] memory);
 
+
+    // The Auction time is finished
+    error FinishedAuctionError();
 
 
     event BidSubmitted(
