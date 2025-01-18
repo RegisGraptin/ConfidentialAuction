@@ -283,6 +283,11 @@ describe("PrivateAuction", function () {
       auctionId++;
     }
 
+    // TODO: Check alice allocation
+    // let beforeAliceEthBalance = await ethers.provider.getBalance(this.signers.alice.address);
+
+
+
   });
 
  // TODO: test less allocation

@@ -12,7 +12,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
 
-import {IPrivateAuction, Auction} from "./interfaces/IPrivateAuction.sol";
+import {IConfidentialAuction, Bid} from "./interfaces/IPrivateAuction.sol";
 
 import {BokkyPooBahsRedBlackTreeLibrary} from "./lib/BokkyPooBahsRedBlackTreeLibrary.sol";
 
@@ -22,20 +22,21 @@ contract PrivateAuction is
     ERC20,
     Ownable,
     GatewayCaller,
-    ReentrancyGuard
+    ReentrancyGuard,
+    IConfidentialAuction
 {
     using BokkyPooBahsRedBlackTreeLibrary for BokkyPooBahsRedBlackTreeLibrary.Tree;
     BokkyPooBahsRedBlackTreeLibrary.Tree priceOrderTree;
 
     // Auction properties
-    uint256 public lastAuctionId;
+    uint256 public lastBidId;
     uint256 public endAuctionTime;
 
     // Decypher properties
     uint256 public lastAuctionProccessed;
 
-    mapping(uint256 auctionId => Auction) public auctions;
-    mapping(uint256 requestId => uint256 auctionId) public decypherProcess;
+    mapping(uint256 bidId => Bid) public bids;
+    mapping(uint256 requestId => uint256 bidId) public decypherProcess;
 
     // The Auction time is finished
     error FinishedAuctionError();
@@ -64,11 +65,12 @@ contract PrivateAuction is
     // 3. User validate the auction by paying the value
 
     // FIXME: Do we need a min fix allocation to avoid flood
-    function createAuction(
+    function submitEncryptedBid(
         einput eRequestedAmount,
         einput ePricePerUnit,
         bytes calldata inputProof
-    ) external _activeAuction returns (uint256) {
+    ) external override _activeAuction returns (uint256){
+
         // Expect euint256 values
         euint256 eAmount = TFHE.asEuint256(eRequestedAmount, inputProof);
         euint256 ePrice = TFHE.asEuint256(ePricePerUnit, inputProof);
@@ -87,16 +89,16 @@ contract PrivateAuction is
         cts[0] = Gateway.toUint256(eAmountToPay);
         uint256 requestId = Gateway.requestDecryption(
             cts,
-            this.gateway_decypher_total_value.selector,
+            this.gatewayDecypherBidTotalValue.selector,
             0,
             block.timestamp + 100,
             false
         );
         // Map the request ID to the auction Id
-        decypherProcess[requestId] = lastAuctionId;
+        decypherProcess[requestId] = lastBidId;
 
         // Create an auction that needs to be validated
-        auctions[lastAuctionId] = Auction({
+        bids[lastBidId] = Bid({
             user: msg.sender,
             creationTime: block.timestamp,
             eRequestedAmount: eAmount,
@@ -107,47 +109,47 @@ contract PrivateAuction is
             totalValueLock: 0
         });
 
+        emit BidSubmitted(msg.sender, lastBidId);
+
         // Increment the auction
-        lastAuctionId++;
+        lastBidId++;
 
-        // TODO :: Emit event ?
-
-        return lastAuctionId - 1;
+        return lastBidId - 1;
     }
 
-    function gateway_decypher_total_value(
+    function gatewayDecypherBidTotalValue(
         uint256 requestId,
         uint256 result
-    ) public onlyGateway { // Public ??
-        auctions[decypherProcess[requestId]].totalValueLock = result;
+    ) public onlyGateway {
+        bids[decypherProcess[requestId]].totalValueLock = result;
         // TODO: emit smth
     }
 
-    function confirmAuction(
-        uint256 auctionId
+    function confirmBid(
+        uint256 bidId
     ) external payable _activeAuction nonReentrant {
-        require(auctionId < lastAuctionId, "INVALID_AUCTION_ID");
+        require(bidId < lastBidId, "INVALID_AUCTION_ID");
 
         // We expect the user to pay
-        require(auctions[auctionId].user == msg.sender, "INVALID_USER");
-        require(!auctions[auctionId].validated, "ALREADY_VALIDATED");
+        require(bids[bidId].user == msg.sender, "INVALID_USER");
+        require(!bids[bidId].validated, "ALREADY_VALIDATED");
 
         // We should know how much eth the user has to pay
-        require(auctions[auctionId].totalValueLock > 0, "INVALID_AUCTION");
+        require(bids[bidId].totalValueLock > 0, "INVALID_AUCTION");
 
         // We should have enough token
         require(
-            msg.value >= auctions[auctionId].totalValueLock,
+            msg.value >= bids[bidId].totalValueLock,
             "NOT_ENOUGH_FUNDS"
         );
 
         // Validate the auction
-        auctions[auctionId].validated = true;
+        bids[bidId].validated = true;
 
         // TODO: emit event ?
 
         // Pay back the excess token to the user
-        uint256 excess = msg.value - auctions[auctionId].totalValueLock;
+        uint256 excess = msg.value - bids[bidId].totalValueLock;
 
         if (excess > 0) {
             (bool success, ) = msg.sender.call{value: excess}("");
@@ -155,15 +157,14 @@ contract PrivateAuction is
         }
     }
 
-    function cancelAuction(
-        uint256 auctionId
-    ) external _activeAuction nonReentrant {
-        require(auctionId < lastAuctionId, "INVALID_AUCTION_ID");
-        require(auctions[auctionId].user == msg.sender, "INVALID_USER");
-        require(auctions[auctionId].validated, "NOT_VALIDATED_AUCTION");
+    function cancelBid(uint256 bidId
+    ) external override  _activeAuction nonReentrant {
+        require(bidId < lastBidId, "INVALID_AUCTION_ID");
+        require(bids[bidId].user == msg.sender, "INVALID_USER");
+        require(bids[bidId].validated, "NOT_VALIDATED_AUCTION");
 
-        uint256 value = auctions[auctionId].totalValueLock;
-        auctions[auctionId].validated = false;
+        uint256 value = bids[bidId].totalValueLock;
+        bids[bidId].validated = false;
 
         // TODO: Delete is not possible, as we have two mapping one for decypher the total amount
         // Before being able to pay. This will be an issue, if someone is able to mix the auction value.
@@ -175,24 +176,24 @@ contract PrivateAuction is
         }
     }
 
-    function resolveAuction(uint256 numberToProcceed) external {
+    function resolveAuction(uint256 numberToProcceed) external override {
         // We need to decypher all the token allocation by the user
         require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
-        require(lastAuctionProccessed < lastAuctionId, "PROCEED_ALL_DATA"); // TODO: Use it for last process
+        require(lastAuctionProccessed < lastBidId, "PROCEED_ALL_DATA"); // TODO: Use it for last process
 
         // Request to decypher all the vote
-        while (numberToProcceed > 0 && lastAuctionProccessed < lastAuctionId) {
+        while (numberToProcceed > 0 && lastAuctionProccessed < lastBidId) {
             // Process only valid auction
-            if (auctions[lastAuctionProccessed].validated) {
+            if (bids[lastAuctionProccessed].validated) {
                 // euint256 eRequestedAmount;
                 // euint256 ePricePerUnit;
 
                 uint256[] memory cts = new uint256[](2);
                 cts[0] = Gateway.toUint256(
-                    auctions[lastAuctionProccessed].eRequestedAmount
+                    bids[lastAuctionProccessed].eRequestedAmount
                 );
                 cts[1] = Gateway.toUint256(
-                    auctions[lastAuctionProccessed].ePricePerUnit
+                    bids[lastAuctionProccessed].ePricePerUnit
                 );
                 uint256 requestId = Gateway.requestDecryption(
                     cts,
@@ -227,13 +228,13 @@ contract PrivateAuction is
         uint256 pricePerUnit
     ) public onlyGateway {
         // Get the auction id
-        uint256 auctionId = decypherProcess[requestId];
+        uint256 bidId = decypherProcess[requestId];
 
         // FIXME :: Store decypher value
 
         // Store decypher data
-        auctions[auctionId].dRequestedAmount = requestedAmount;
-        auctions[auctionId].dPricePerUnit = pricePerUnit;
+        bids[bidId].dRequestedAmount = requestedAmount;
+        bids[bidId].dPricePerUnit = pricePerUnit;
 
         // Does the price already exists
         if (orderedAuctionPerUser[pricePerUnit].length == 0) {
@@ -242,21 +243,22 @@ contract PrivateAuction is
         }
 
         // Add the id to the matching value
-        orderedAuctionPerUser[pricePerUnit].push(auctionId);
+        orderedAuctionPerUser[pricePerUnit].push(bidId);
 
         // TODO: emit smth
     }
 
-    function distributeToken(uint numberToProceed) external nonReentrant { // FIXME:: check condition
+    // FIXME:: check condition
+    function distributeToken(uint256 numberToProceed) external override nonReentrant { 
         while (
             balanceOf(address(this)) > 0 && // We still have token to distribute
             numberToProceed > 0 &&
-            priceOrderTree.root != 0 // We still have available auctions
+            priceOrderTree.root != 0 // We still have available bids
         ) {
             // Get the better price
             uint256 keyPrice = priceOrderTree.last();
 
-            // Get the mapped auctions
+            // Get the mapped bids
             while (orderedAuctionPerUser[keyPrice].length > 0) {
                 if (numberToProceed == 0) {
                     // Stop the process
@@ -264,7 +266,7 @@ contract PrivateAuction is
                 }
 
                 // Get the last item and remove it
-                uint256 auctionId = orderedAuctionPerUser[keyPrice][
+                uint256 bidId = orderedAuctionPerUser[keyPrice][
                     orderedAuctionPerUser[keyPrice].length - 1
                 ];
                 orderedAuctionPerUser[keyPrice].pop();
@@ -272,14 +274,14 @@ contract PrivateAuction is
                 // compute the token to send
                 uint256 tokenToSend = Math.min(
                     balanceOf(address(this)),
-                    auctions[auctionId].dRequestedAmount
+                    bids[bidId].dRequestedAmount
                 );
 
                 // Update the token paid value
-                auctions[auctionId].totalValueLock -= tokenToSend * auctions[auctionId].dPricePerUnit;
+                bids[bidId].totalValueLock -= tokenToSend * bids[bidId].dPricePerUnit;
 
                 // Transfer to the user
-                _transfer(address(this), auctions[auctionId].user, tokenToSend);
+                _transfer(address(this), bids[bidId].user, tokenToSend);
 
                 // We can stop if we have no more token to distribute
                 if (balanceOf(address(this)) == 0) {
@@ -289,29 +291,31 @@ contract PrivateAuction is
                 numberToProceed--;
             }
 
-            // No more auctions for this key price
+            // No more bids for this key price
             // We can remove the price from our tree
             priceOrderTree.remove(keyPrice);
         }
 
-        // In the particular case where we have explored all the auctions
+        // In the particular case where we have explored all the bids
         // And we still have tokens, we send them to the owner
 
         if (balanceOf(address(this)) > 0 && priceOrderTree.root == 0) {
             _transfer(address(this), this.owner(), balanceOf(address(this)));
+
+            // FIXME: Need to transfer to the user the fund collected
         }
     }
 
-    function unlock(uint256 auctionId) external nonReentrant {
+    function refundUnsuccessfulBids(uint256 bidId) external override nonReentrant {
         require(balanceOf(address(this)) == 0, "STILL_TOKEN_UNDISTRIBUTED");
-        require(auctions[auctionId].user == msg.sender, "INVALID_USER");
-        require(auctions[auctionId].validated, "NOT_VALIDATED_AUCTION");
-        require(auctions[auctionId].totalValueLock > 0, "NO_MORE_TOKEN");
+        require(bids[bidId].user == msg.sender, "INVALID_USER");
+        require(bids[bidId].validated, "NOT_VALIDATED_AUCTION");
+        require(bids[bidId].totalValueLock > 0, "NO_MORE_TOKEN");
 
-        uint256 unlockAmount = auctions[auctionId].totalValueLock;
+        uint256 unlockAmount = bids[bidId].totalValueLock;
         
         // Update the value
-        auctions[auctionId].totalValueLock = 0;
+        bids[bidId].totalValueLock = 0;
 
         // TODO : Emit action
 
