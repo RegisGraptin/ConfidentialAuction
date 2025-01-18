@@ -18,15 +18,23 @@ struct Bid {
 
 interface IConfidentialAuction {
     
-    /// Views
-    function lastBidId() external view returns(uint256);
+    /// @notice Returns the ID that will be assigned to the next bid.
+    /// @return The ID that will be assigned to the next bid (lastBidId + 1).
+    function nextBidId() external view returns(uint256);
 
+    /// @notice Returns the end time of the auction.
+    /// @return The timestamp representing the end time of the auction.
     function endAuctionTime() external view returns(uint256);
 
+    /// @notice Retrieves the details of a specific bid by its ID.
+    /// @param bidId The ID of the bid to retrieve.
+    /// @return The details of the bid.
     function bids(uint256 bidId) external view returns(Bid memory);
     
+    /// @notice Returns the list of bid IDs placed by a specific user.
+    /// @param user The address of the user whose bids are to be fetched.
+    /// @return An array of bid IDs representing the bids placed by the specified user.
     function userBids(address user) external view returns (uint256[] memory);
-
 
     // The Auction time is finished
     error FinishedAuctionError();
@@ -60,6 +68,17 @@ interface IConfidentialAuction {
         uint256 amount          // Amount of ETH refunded to the bidder.
     );
 
+    event GatewayTotalValueRequested(
+        uint256 indexed bidId,  // The unique identifier of the bid.
+        uint256 amount,         // Total amount needed to be lock by the user to confirm his bid.
+    );
+
+    event GatewayDecryptBid(
+        uint256 indexed bidId,   // The unique identifier of the bid.
+        uint256 requestedAmount, // Decrypted value of the requested amount of token.
+        uint256 pricePerUnit     // Decrypted value of the price per token.
+    );
+
 
     /// @notice Submits an encrypted bid for the running auction.
     /// @dev The bid consists of encrypted inputs for the requested token amount and price per unit,
@@ -69,6 +88,8 @@ interface IConfidentialAuction {
     /// @param ePricePerUnit Encrypted price per unit the bidder is willing to pay.
     /// @param inputProof Cryptographic proof verifying the validity of the encrypted inputs.
     /// @return bidId A unique identifier for the submitted bid.
+    /// @custom:requirements
+    /// - The auction must still be active.
     function submitEncryptedBid(
         einput eRequestedAmount,
         einput ePricePerUnit,
@@ -83,6 +104,8 @@ interface IConfidentialAuction {
     ///      This function must be available only when we have successfuly decypher the total amount 
     ///      of the user bid (requestedAmount * pricePerUnit)
     /// @param bidId The unique identifier of the bid to be confirmed associated to the user.
+    /// @custom:requirements
+    /// - The auction must still be active.
     function confirmBid(uint256 bidId) external payable;
 
 

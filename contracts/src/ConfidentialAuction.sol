@@ -32,7 +32,7 @@ contract ConfidentialAuction is
 {
     
     /// @notice The ID of the most recent bid
-    uint256 public lastBidId;
+    uint256 public nextBidId;
 
     /// @notice The timestamp at which the auction ends
     uint256 public endAuctionTime;
@@ -56,18 +56,22 @@ contract ConfidentialAuction is
     mapping(address => uint256[]) private _userBids;
 
     /// @notice A mapping from request ID to bid ID for the decryption process
-    mapping(uint256 requestId => uint256 bidId) internal decypherProcess;
+    mapping(uint256 requestId => uint256 bidId) internal _gatewayProcess;
 
     /// @notice A mapping to order bids by price. It stores an array of bid IDs for each price.
-    mapping(uint256 price => uint256[] bidIds) internal orderedAuctionPerUser;
+    mapping(uint256 price => uint256[] bidIds) internal _orderedAuctionPerUser;
 
     /// @dev This contract uses the BokkyPooBahsRedBlackTreeLibrary to efficiently manage and order price of the bid.
     ///      It will help us during the resolution where we can have the price sorted and resolve the bid accordingly. 
 
     /// @dev This contract uses the BokkyPooBahsRedBlackTreeLibrary to efficiently manage and order the prices of bids.
     using BokkyPooBahsRedBlackTreeLibrary for BokkyPooBahsRedBlackTreeLibrary.Tree;
-    BokkyPooBahsRedBlackTreeLibrary.Tree internal priceOrderTree;
+    BokkyPooBahsRedBlackTreeLibrary.Tree internal _priceOrderTree;
 
+
+    //////////////////////////////////////////////////////////////////
+    /// View functions
+    //////////////////////////////////////////////////////////////////
 
     function bids(uint256 bidId) external view returns(Bid memory) {
         return _bids[bidId];
@@ -97,11 +101,10 @@ contract ConfidentialAuction is
         _;
     }
 
-    // 1. Create auction and ask to decypher total requested value
-    // 2. Decypher it by the callback of the gateway
-    // 3. User validate the auction by paying the value
-
-    // FIXME: Do we need a min fix allocation to avoid flood
+    /// @inheritdoc IConfidentialAuction
+    /// @dev We allow the contract to request future decryption of the encrypted parameters.
+    ///      At this phase, only the total value amount derived from the input bid will be decrypted.
+    /// 
     function submitEncryptedBid(
         einput eRequestedAmount,
         einput ePricePerUnit,
@@ -111,7 +114,7 @@ contract ConfidentialAuction is
         euint256 eAmount = TFHE.asEuint256(eRequestedAmount, inputProof);
         euint256 ePrice = TFHE.asEuint256(ePricePerUnit, inputProof);
 
-        // Allow the smart contract to decypher those data on the resolution time
+        // Allow the smart contract to decrypt those data for the resolution phase
         TFHE.allowThis(eAmount);
         TFHE.allowThis(ePrice);
 
@@ -119,23 +122,23 @@ contract ConfidentialAuction is
         euint256 eAmountToPay = TFHE.mul(eAmount, ePrice);
         TFHE.allowThis(eAmountToPay);
 
-        // Request to decypher the total amount to be able to verify user payment
-
+        // Request to decrypt the total amount to be able to verify and confirm the bid
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(eAmountToPay);
         uint256 requestId = Gateway.requestDecryption(
             cts,
-            this.gatewayDecypherBidTotalValue.selector,
+            this.gatewaydecryptBidTotalValue.selector,
             0,
             block.timestamp + 100,
             false
         );
-        // Map the request ID to the auction Id
-        decypherProcess[requestId] = lastBidId;
+
+        // Map the request ID to the bid Id
+        _gatewayProcess[requestId] = nextBidId;
         _pendingGatewayItems++;
 
         // Create an auction that needs to be confirmed
-        _bids[lastBidId] = Bid({
+        _bids[nextBidId] = Bid({
             user: msg.sender,
             creationTime: block.timestamp,
             eRequestedAmount: eAmount,
@@ -146,24 +149,18 @@ contract ConfidentialAuction is
             totalValueLock: 0
         });
 
-        _userBids[msg.sender].push(lastBidId);
+        // Save the bid for the user
+        _userBids[msg.sender].push(nextBidId);
 
-        emit BidSubmitted(msg.sender, lastBidId);
+        emit BidSubmitted(msg.sender, nextBidId);
 
-        // Increment the auction
-        lastBidId++;
-
-        return lastBidId - 1;
+        nextBidId++;
+        return nextBidId - 1;
     }
 
-    function gatewayDecypherBidTotalValue(uint256 requestId, uint256 result) public onlyGateway {
-        _bids[decypherProcess[requestId]].totalValueLock = result;
-        // TODO: emit smth
-        _pendingGatewayItems--;
-    }
 
     function confirmBid(uint256 bidId) external payable activeAuction nonReentrant {
-        require(bidId < lastBidId, "INVALID_BID");
+        require(bidId < nextBidId, "INVALID_BID");
         require(_bids[bidId].user == msg.sender, "INVALID_USER");
         require(!_bids[bidId].confirmed, "ALREADY_CONFIRMED");
 
@@ -186,14 +183,14 @@ contract ConfidentialAuction is
     }
 
     function cancelBid(uint256 bidId) external override activeAuction nonReentrant {
-        require(bidId < lastBidId, "INVALID_BID");
+        require(bidId < nextBidId, "INVALID_BID");
         require(_bids[bidId].user == msg.sender, "INVALID_USER");
         require(_bids[bidId].confirmed, "NOT_confirmed_AUCTION");
 
         uint256 value = _bids[bidId].totalValueLock;
         _bids[bidId].confirmed = false;
 
-        // TODO: Delete is not possible, as we have two mapping one for decypher the total amount
+        // TODO: Delete is not possible, as we have two mapping one for decrypt the total amount
         // Before being able to pay. This will be an issue, if someone is able to mix the auction value.
 
         emit BidCanceled(_bids[bidId].user, bidId, value);
@@ -205,37 +202,34 @@ contract ConfidentialAuction is
     }
 
     function resolveAuction(uint256 numberToProcceed) external override {
-        // We need to decypher all the token allocation by the user
+        // We need to decrypt all the token allocation by the user
         require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
-        require(lastBidProcessed < lastBidId, "PROCEED_ALL_DATA"); // TODO: Use it for last process
+        require(lastBidProcessed < nextBidId, "PROCEED_ALL_DATA"); // TODO: Use it for last process
         require(_pendingGatewayItems == 0, "UNFINISHED_GATEWAY_PROCESS");
 
-        // Decypher process needs to be done backward (lastBid to 0)
-        // In order to sort during the gateway decypher process 
+        // decrypt process needs to be done backward (lastBid to 0)
+        // In order to sort during the gateway decrypt process 
 
-        // Request to decypher all the vote
-        while (numberToProcceed > 0 && lastBidProcessed < lastBidId) {
-            // Process only valid auction
-            uint256 index = lastBidId - lastBidProcessed - 1;
+        // Request to decrypt all the vote
+        while (numberToProcceed > 0 && lastBidProcessed < nextBidId) {
+            // Process only confirmed bid
+            uint256 index = nextBidId - lastBidProcessed - 1;
             if (_bids[index].confirmed) {
-                // euint256 eRequestedAmount;
-                // euint256 ePricePerUnit;
-
+                // Decrypt the bid parameter
                 uint256[] memory cts = new uint256[](2);
                 cts[0] = Gateway.toUint256(_bids[index].eRequestedAmount);
                 cts[1] = Gateway.toUint256(_bids[index].ePricePerUnit);
                 uint256 requestId = Gateway.requestDecryption(
                     cts,
-                    this.gatewayCallbackDecypherBid.selector,
+                    this.gatewayCallbackDecryptBid.selector,
                     0,
                     block.timestamp + 100,
                     false
                 );
                 _pendingGatewayItems++;
 
-                // FIXME: second time we are using it - Issue of overriting ??
                 // Map the request ID to the auction Id
-                decypherProcess[requestId] = index;
+                _gatewayProcess[requestId] = index;
             }
 
             lastBidProcessed++;
@@ -243,58 +237,35 @@ contract ConfidentialAuction is
         }
     }
 
-    function gatewayCallbackDecypherBid(
-        uint256 requestId,
-        uint256 requestedAmount,
-        uint256 pricePerUnit
-    ) public onlyGateway {
-        // Get the auction id
-        uint256 bidId = decypherProcess[requestId];
-
-        // Store decypher data
-        _bids[bidId].dRequestedAmount = requestedAmount;
-        _bids[bidId].dPricePerUnit = pricePerUnit;
-
-        // Does the price already exists
-        if (orderedAuctionPerUser[pricePerUnit].length == 0) {
-            // Keep track of the price to iterate later on to asc order
-            priceOrderTree.insert(pricePerUnit);
-        }
-
-        // Add the id to the matching value
-        orderedAuctionPerUser[pricePerUnit].push(bidId);
-        _pendingGatewayItems--;
-
-        // TODO: emit smth
-    }
+    
 
     // FIXME:: check condition
     function distributeToken(uint256 numberToProceed) external override nonReentrant {
         require(block.timestamp > endAuctionTime, "UNFINISHED_AUCTION");
-        require(lastBidProcessed >= lastBidId, "PROCEED_ALL_DATA");
+        require(lastBidProcessed >= nextBidId, "PROCEED_ALL_DATA");
         require(_pendingGatewayItems == 0, "UNFINISHED_GATEWAY_PROCESS");
 
 
         while (
             balanceOf(address(this)) > 0 && // We still have token to distribute
             numberToProceed > 0 &&
-            priceOrderTree.root != 0 // We still have available bids
+            _priceOrderTree.root != 0 // We still have available bids
         ) {
             // Get the better price
-            uint256 keyPrice = priceOrderTree.last();
+            uint256 keyPrice = _priceOrderTree.last();
 
             // Get the mapped bids
-            while (orderedAuctionPerUser[keyPrice].length > 0) {
+            while (_orderedAuctionPerUser[keyPrice].length > 0) {
                 if (numberToProceed == 0) {
                     // Stop the process
                     return;
                 }
 
                 // Get the last item and remove it
-                uint256 bidId = orderedAuctionPerUser[keyPrice][
-                    orderedAuctionPerUser[keyPrice].length - 1
+                uint256 bidId = _orderedAuctionPerUser[keyPrice][
+                    _orderedAuctionPerUser[keyPrice].length - 1
                 ];
-                orderedAuctionPerUser[keyPrice].pop();
+                _orderedAuctionPerUser[keyPrice].pop();
 
                 // compute the token to send
                 uint256 tokenToSend = Math.min(balanceOf(address(this)), _bids[bidId].dRequestedAmount);
@@ -323,13 +294,13 @@ contract ConfidentialAuction is
 
             // No more bids for this key price
             // We can remove the price from our tree
-            priceOrderTree.remove(keyPrice);
+            _priceOrderTree.remove(keyPrice);
         }
 
         // In the particular case where we have explored all the bids
         // And we still have tokens, we send them to the owner
 
-        if (balanceOf(address(this)) > 0 && priceOrderTree.root == 0) {
+        if (balanceOf(address(this)) > 0 && _priceOrderTree.root == 0) {
             _transfer(address(this), this.owner(), balanceOf(address(this)));
 
             // FIXME: Need to transfer to the user the fund collected
@@ -363,4 +334,44 @@ contract ConfidentialAuction is
         (bool success, ) = msg.sender.call{ value: unlockAmount }("");
         require(success, "Refund failed");
     }
+
+    //////////////////////////////////////////////////////////////////
+    /// Gateway Callback Functions
+    //////////////////////////////////////////////////////////////////
+
+    /// Gateway Callback - Decrypt the total value of the bid requested
+    function gatewaydecryptBidTotalValue(uint256 requestId, uint256 result) public onlyGateway {
+        _bids[_gatewayProcess[requestId]].totalValueLock = result;
+        emit GatewayTotalValueRequested(_gatewayProcess[requestId], result);
+        delete _gatewayProcess[requestId];
+        _pendingGatewayItems--;
+    }
+
+    /// Gateway Callback - decrypt the bid parameter
+    function gatewayCallbackDecryptBid(
+        uint256 requestId,
+        uint256 requestedAmount,
+        uint256 pricePerUnit
+    ) public onlyGateway {
+        // Get the bid id
+        uint256 bidId = _gatewayProcess[requestId];
+
+        // Store decrypt data
+        _bids[bidId].dRequestedAmount = requestedAmount;
+        _bids[bidId].dPricePerUnit = pricePerUnit;
+
+        // Does the price already exists
+        if (_orderedAuctionPerUser[pricePerUnit].length == 0) {
+            // Keep track of the price to iterate later on to asc order
+            _priceOrderTree.insert(pricePerUnit);
+        }
+
+        // Add the id to the matching value
+        _orderedAuctionPerUser[pricePerUnit].push(bidId);
+        _pendingGatewayItems--;
+
+        delete _gatewayProcess[requestId];
+        emit GatewayDecryptBid(bidId, requestedAmount, pricePerUnit);
+    }
+
 }
