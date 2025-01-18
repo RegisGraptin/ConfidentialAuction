@@ -23,6 +23,7 @@ describe("ConfidentialAuction", function () {
     this.contractAddress = await contract.getAddress();
     this.contract = contract;
     this.fhevm = await createInstance();
+    this.owner = this.signers.alice.address;
 
     // Create helper function
     this.submitEncryptedBid = async (signer: HardhatEthersSigner, requestAmount: number, pricePerToken: number) => {
@@ -75,7 +76,7 @@ describe("ConfidentialAuction", function () {
   });
 
 
-  it("should create auction", async function () {
+  it("should create bid", async function () {
     
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     // Wait for decryption
@@ -90,13 +91,13 @@ describe("ConfidentialAuction", function () {
     expect(auction[7]).to.be.eq(100_000n * 10_000n);
   });
 
-  it("should revert cancel invalid auction", async function () {
+  it("should revert when cancel an invalid bid", async function () {
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
     await expect(this.contract.cancelBid(0)).to.be.reverted;
   });
 
-  it("should fund the auction and validate it", async function () {
+  it("should fund the bid and confirm it", async function () {
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
     
@@ -119,14 +120,14 @@ describe("ConfidentialAuction", function () {
     expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - total_value - gasUsed);
   });
 
-  it("fund with not enough funds", async function () {
+  it("should revert when find the bid with not enough funds", async function () {
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
     await expect(this.contract.confirmBid(0)).to.be.reverted;
     await expect(this.contract.confirmBid(0, {value: 1})).to.be.reverted;
   });
 
-  it("fund back user if too much eth", async function () {
+  it("should send back eth when confirming a bid with more token than needed", async function () {
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await awaitAllDecryptionResults();
 
@@ -149,7 +150,7 @@ describe("ConfidentialAuction", function () {
   });
 
 
-  it("check cancel auction", async function () {
+  it("should cancel a confirmed bid", async function () {
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await this.confirmBid(this.signers.alice, 0, 100_000n, 10_000n);
     
@@ -177,7 +178,7 @@ describe("ConfidentialAuction", function () {
 
 
 
-  it("check cancel auction", async function () {
+  it("should decrypt the bid after resolution phase", async function () {
     await this.submitEncryptedBid(this.signers.alice, 100_000n, 10_000n);
     await this.confirmBid(this.signers.alice, 0, 100_000n, 10_000n);
 
@@ -186,7 +187,7 @@ describe("ConfidentialAuction", function () {
     // Move to a week from now, to be able to resolve the auction
     await this.resolveAuction(1);
 
-    // All the auctions should now be decypher
+    // All the bids should now be decrypted
     const auction = await this.contract.bids(0);
     expect(auction[0]).to.be.eq(this.signers.alice.address);
     expect(auction[4]).to.be.eq(100_000n);
@@ -199,15 +200,15 @@ describe("ConfidentialAuction", function () {
 
   class ConfigUser {
     name: string;
-    requestAmount: number;
-    pricePerToken: number;
-    expectedAllocation: number
+    requestAmount: bigint;
+    pricePerToken: bigint;
+    expectedAllocation: bigint
 
     constructor ({name, requestAmount, pricePerToken, expectedAllocation}: {
       name: string, 
-      requestAmount: number, 
-      pricePerToken: number, 
-      expectedAllocation: number
+      requestAmount: bigint, 
+      pricePerToken: bigint, 
+      expectedAllocation: bigint
     }) {
       this.name = name;
       this.requestAmount = requestAmount;
@@ -215,43 +216,54 @@ describe("ConfidentialAuction", function () {
       this.expectedAllocation = expectedAllocation;
     } 
 
-    getExpectedEthBack(): number {
+    getExpectedEthBack(): bigint {
       return (this.requestAmount - this.expectedAllocation) * this.pricePerToken;
     }
   }
 
   
-  it("check example allocation", async function () {
+  it("should match the expected allocation", async function () {
     // https://github.com/zama-ai/bounty-program/issues/136
     // Bob   bids 0.000002 ether      | 2_000_000_000_000 wei | 500_000 tokens
     // Carol bids 0.000008 ether      | 8_000_000_000_000 wei | 600_000 tokens
     // David bids 0.00000000001 ether |        10_000_000 wei | 1_000_000 tokens
 
+    await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(0);
+
+    // TODO: Nice you have done a multi price auction !!!
+    // Don't give up man !
+    let totalETHExpectedFromSell = 5_600_000_000_000_000_000n;
+
     let config: ConfigUser[] = [
-      new ConfigUser({name: "bob", requestAmount: 500_000, pricePerToken: 2_000_000_000_000, expectedAllocation: 400_000}),
-      new ConfigUser({name: "carol", requestAmount: 600_000, pricePerToken: 8_000_000_000_000, expectedAllocation: 600_000}),
-      new ConfigUser({name: "dave", requestAmount: 1_000_000, pricePerToken: 10_000_000, expectedAllocation: 0}),
+      new ConfigUser({name: "bob", requestAmount: 500_000n, pricePerToken: 2_000_000_000_000n, expectedAllocation: 400_000n}),
+      new ConfigUser({name: "carol", requestAmount: 600_000n, pricePerToken: 8_000_000_000_000n, expectedAllocation: 600_000n}),
+      new ConfigUser({name: "dave", requestAmount: 1_000_000n, pricePerToken: 10_000_000n, expectedAllocation: 0n}),
     ]
 
     let bidId = 0
+    let totalETHLock = 0n;
     for (let user of config) {
       await this.submitEncryptedBid(this.signers[user.name], user["requestAmount"], user["pricePerToken"]);
       await this.confirmBid(this.signers[user.name], bidId, user["requestAmount"], user["pricePerToken"]);
       bidId++;
+      totalETHLock += user["requestAmount"] * user["pricePerToken"];
     }
+
+    // Check contract ETH Balance
+    await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(totalETHLock);
 
     // Step in the future and resolve all the auctions
     await this.resolveAuction();
-    
+
     // Proceed with the token distribution
     await this.contract.distributeToken(5);
     
-    // The contract should have distributed the tokens
-    expect(await this.contract.balanceOf(this.contractAddress)).to.equal(0n, "Invalid balance");
+    // The contract should have distributed all the ERC20 token
+    await expect(await this.contract.balanceOf(this.contractAddress)).to.equal(0n, "Invalid balance");
 
     // Check user allocation
     for (let user of config) {
-      expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
+      await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
     };
 
     // Check user payback 
@@ -271,15 +283,37 @@ describe("ConfidentialAuction", function () {
         const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
         const userEthBalanceAfter = await ethers.provider.getBalance(userAddress);
 
-        expect(userEthBalanceAfter ).to.be.eq(userEthBalanceBefore - gasUsed + BigInt(payBackAmount));
+        expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - gasUsed + BigInt(payBackAmount));
 
       } else {
-        // the transaction should revert has we have no more token available
+        // the transaction should revert as we have no more token available
         await expect(userWallet.refundUnsuccessfulBids(bidId)).to.be.reverted;
       }
       
       bidId++;
     }
+
+    // Check owner allocation
+    // Contract should have no more ERC20 token
+    await expect(await this.contract.balanceOf(this.contractAddress)).to.be.equal(0, "Invalid balance")
+    
+    // And should have refund all the people, only have the ETH value from the sell
+    await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.equal(totalETHExpectedFromSell, "Invalid balance")
+
+    // But should now claimed some ETH
+    
+    await expect(await this.contract.balanceOf(this.owner)).to.be.equal(0, "Invalid balance")
+    const beforeOwnerETHBalance = await ethers.provider.getBalance(this.owner);
+    const transaction = await this.contract.claimETHToken();
+    const receipt = await transaction.wait()
+    const afterOwnerETHBalance = await ethers.provider.getBalance(this.owner);
+    expect(afterOwnerETHBalance).to.be.above(beforeOwnerETHBalance);
+
+    const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
+    expect(afterOwnerETHBalance).to.be.eq(beforeOwnerETHBalance - gasUsed + totalETHExpectedFromSell);
+
+    // expect(afterOwnerETHBalance).to.be.above(beforeOwnerETHBalance);
+
 
     // TODO: Check alice allocation
     // let beforeAliceEthBalance = await ethers.provider.getBalance(this.signers.alice.address);
@@ -294,3 +328,4 @@ describe("ConfidentialAuction", function () {
 
 
 });
+

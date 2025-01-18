@@ -160,7 +160,6 @@ interface IConfidentialAuction {
     /// - The function should be called iteratively to handle a large number of bidders without running out of gas.
     function distributeToken(uint256 numberToProceed) external;
 
-
     /// @notice Refunds the ETH locked in an unsuccessful bid.
     /// @dev This function is called to release and refund the ETH from a bid that was not successful.
     ///      It ensures that the funds are refunded only after the auction has concluded and the bid status 
@@ -169,5 +168,20 @@ interface IConfidentialAuction {
     /// @custom:requirements
     /// - The auction must be concluded and the bid status must be unsuccessful.
     function refundUnsuccessfulBids(uint256 bidId) external;
+
+    /// @notice Distribute the ETH cumulated during the auction to the owner.
+    /// @dev This function is called by the owner to claimed the ETH won. 
+    /// @custom:requirements
+    /// - The auction must be concluded and all the token should have been distributed.
+
+    /// @notice Distributes the ETH accumulated from the sale of tokens during the auction to the owner.
+    /// @dev This function allows the owner to claim the ETH that has been collected exclusively
+    ///      from the sale of tokens in the auction. The auction must be concluded, all the ERC20 tokens 
+    ///      should have been distributed, and no bids should remain unprocessed before calling this function.
+    /// @custom:requirements
+    /// - The auction must be concluded (i.e., the end time has passed).
+    /// - All tokens must have been successfully distributed to the winning bidders.
+    /// - The owner must be the caller of the function.
+    function claimETHToken() external;
 
 }

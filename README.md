@@ -86,6 +86,10 @@ Should we create a DAO and the DAO take a fee on the transaction.
 
 
 
+## Note 
+
+We assume that we will note have two time the same requestId
+
 
 
 ##### sepolia

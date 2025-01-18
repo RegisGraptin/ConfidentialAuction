@@ -289,17 +289,6 @@ contract ConfidentialAuction is
         }
     }
 
-    function claimETHToken() public onlyOwner nonReentrant {
-        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
-        if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
-        if (ethClaimedAfterSell) revert ETHAlreadyClaimed();
-
-        ethClaimedAfterSell = true;
-
-        (bool success, ) = msg.sender.call{ value: totalEthFromSale }("");
-        require(success, "Refund failed");
-    }
-
     function refundUnsuccessfulBids(uint256 bidId) external override nonReentrant {
         if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
         if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
@@ -316,6 +305,19 @@ contract ConfidentialAuction is
         (bool success, ) = msg.sender.call{ value: unlockAmount }("");
         require(success, "Refund failed");
     }
+
+    function claimETHToken() public override onlyOwner nonReentrant {
+        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
+        if (ethClaimedAfterSell) revert ETHAlreadyClaimed();
+
+        ethClaimedAfterSell = true;
+
+        (bool success, ) = msg.sender.call{ value: totalEthFromSale }("");
+        require(success, "Refund failed");
+    }
+
+    receive() external payable {}
 
     //////////////////////////////////////////////////////////////////
     /// Gateway Callback Functions
