@@ -198,7 +198,7 @@ describe("ConfidentialAuction", function () {
   });
 
 
-  class ConfigUser {
+  class AllocationParticipant {
     name: string;
     requestAmount: bigint;
     pricePerToken: bigint;
@@ -224,111 +224,106 @@ describe("ConfidentialAuction", function () {
   }
 
   
-  it("should match the expected allocation", async function () {
+  const auctionScenario = [
     // https://github.com/zama-ai/bounty-program/issues/136
     // Bob   bids 0.000002 ether      | 2_000_000_000_000 wei | 500_000 tokens
     // Carol bids 0.000008 ether      | 8_000_000_000_000 wei | 600_000 tokens
     // David bids 0.00000000001 ether |        10_000_000 wei | 1_000_000 tokens
+    { 
+      settlePrice: 2_000_000_000_000n, 
+      participants: [
+        new AllocationParticipant({name: "bob", requestAmount: 500_000n, pricePerToken: 2_000_000_000_000n, expectedAllocation: 400_000n}),
+        new AllocationParticipant({name: "carol", requestAmount: 600_000n, pricePerToken: 8_000_000_000_000n, expectedAllocation: 600_000n}),
+        new AllocationParticipant({name: "dave", requestAmount: 1_000_000n, pricePerToken: 10_000_000n, expectedAllocation: 0n}),
+      ] 
+    },
+  ];
 
-    await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(0);
+  // Dynamically generate tests
+  auctionScenario.forEach(({ settlePrice, participants }: {settlePrice: bigint, participants: AllocationParticipant[]}, index) => {
+    it(`should settle auction scenario ${index}`, async function () {
+      await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(0);  
+      let totalETHExpectedFromSell = settlePrice * 1_000_000n;
 
-    // TODO: Nice you have done a multi price auction !!!
-    // Don't give up man !
-    // Multi auction price - 5_600_000_000_000_000_000n
-    
-    let expectedSettlementPrice = 2_000_000_000_000n;
-    let totalETHExpectedFromSell = 2_000_000_000_000_000_000n;
-
-    let config: ConfigUser[] = [
-      new ConfigUser({name: "bob", requestAmount: 500_000n, pricePerToken: 2_000_000_000_000n, expectedAllocation: 400_000n}),
-      new ConfigUser({name: "carol", requestAmount: 600_000n, pricePerToken: 8_000_000_000_000n, expectedAllocation: 600_000n}),
-      new ConfigUser({name: "dave", requestAmount: 1_000_000n, pricePerToken: 10_000_000n, expectedAllocation: 0n}),
-    ]
-
-    let bidId = 0
-    let totalETHLock = 0n;
-    for (let user of config) {
-      await this.submitEncryptedBid(this.signers[user.name], user["requestAmount"], user["pricePerToken"]);
-      await this.confirmBid(this.signers[user.name], bidId, user["requestAmount"], user["pricePerToken"]);
-      bidId++;
-      totalETHLock += user["requestAmount"] * user["pricePerToken"];
-    }
-
-    // Check contract ETH Balance
-    await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(totalETHLock);
-
-    // Step in the future and resolve all the auctions
-    await this.resolveAuction();
-
-    // Proceed with the token distribution
-    await this.contract.definedAllocation(5);
-    
-    // The contract should have distributed all the ERC20 token
-    // await expect(await this.contract.balanceOf(this.contractAddress)).to.equal(0n, "Invalid balance");
-
-    
-    // Check user payback 
-    bidId = 0
-    for (let user of config) {
-      let payBackAmount = user.getExpectedEthBack(expectedSettlementPrice);
-      let userAddress = this.signers[user.name].address;
-      let userWallet = this.contract.connect(this.signers[user.name]);
-
-      // The user should have an allocation
-      if (user.expectedAllocation > 0) {
-        await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(0, "Invalid user balance");
-        await userWallet.claimAllocation(bidId);
-        await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
+      // Set the bid for all the participants
+      let bidId = 0
+      let totalETHLock = 0n;
+      for (let participant of participants) {
+        await this.submitEncryptedBid(this.signers[participant.name], participant.requestAmount, participant.pricePerToken);
+        await this.confirmBid(this.signers[participant.name], bidId, participant.requestAmount, participant.pricePerToken);
+        bidId++;
+        totalETHLock += participant.requestAmount * participant.pricePerToken;
       }
 
-      // If not allocation or get back eth locked
-      if (payBackAmount > BigInt(0)) {
-        // We should get back the original tokens
-        const userEthBalanceBefore = await ethers.provider.getBalance(userAddress);
+      // Check contract ETH Balance
+      await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(totalETHLock);
 
-        const transaction =  await userWallet.refundBids(bidId);
-        const receipt = await transaction.wait();
+      // Step in the future and resolve all the auctions
+      await this.resolveAuction();
 
-        const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
-        const userEthBalanceAfter = await ethers.provider.getBalance(userAddress);
+      // Proceed with the token distribution
+      await this.contract.definedAllocation(5);
+    
+      // Check the settlement price
+      await expect(await this.contract.auctionSettlePrice()).to.be.eq(settlePrice, "Invalid settlement price");
 
-        expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - gasUsed + BigInt(payBackAmount));
+      // Check user allocation and refund
+      bidId = 0
+      for (let participant of participants) {
+        let payBackAmount = participant.getExpectedEthBack(settlePrice);
+        let userAddress = this.signers[participant.name].address;
+        let userWallet = this.contract.connect(this.signers[participant.name]);
 
-      } else {
-        await expect(await userWallet.refundBids(bidId)).to.be.reverted;
+        // The user should have an allocation
+        if (participant.expectedAllocation > 0) {
+          await expect(await this.contract.balanceOf(this.signers[participant.name].address)).to.equal(0, "Invalid user balance");
+          await userWallet.claimAllocation(bidId);
+          await expect(await this.contract.balanceOf(this.signers[participant.name].address)).to.equal(participant.expectedAllocation, "Invalid user balance");
+        }
+
+        // In case the user have some refund
+        if (payBackAmount > BigInt(0)) {
+          // We should get back the original tokens
+          const userEthBalanceBefore = await ethers.provider.getBalance(userAddress);
+
+          const transaction =  await userWallet.refundBids(bidId);
+          const receipt = await transaction.wait();
+
+          const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
+          const userEthBalanceAfter = await ethers.provider.getBalance(userAddress);
+
+          expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - gasUsed + BigInt(payBackAmount));
+
+        } else {
+          await expect(await userWallet.refundBids(bidId)).to.be.reverted;
+        }
+        
+        bidId++;
       }
+
+      // Contract should have no more ERC20 token
+      await expect(await this.contract.balanceOf(this.contractAddress)).to.be.equal(0n, "Invalid balance")
+
+      // And should have refund all the people, only have the ETH value from the sell
+      await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.equal(totalETHExpectedFromSell, "Invalid balance")
+      await expect(await this.contract.balanceOf(this.owner)).to.be.equal(0, "Invalid balance")
+
+      // Check the owner claimed
+      const beforeOwnerETHBalance = await ethers.provider.getBalance(this.owner);
       
-      // Check user allocation
-      await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
+      const transaction = await this.contract.claimETHToken();
+      const receipt = await transaction.wait()
+      
+      const afterOwnerETHBalance = await ethers.provider.getBalance(this.owner);
+      expect(afterOwnerETHBalance).to.be.above(beforeOwnerETHBalance);
 
-      bidId++;
-    }
+      const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
+      expect(afterOwnerETHBalance).to.be.eq(beforeOwnerETHBalance - gasUsed + totalETHExpectedFromSell);
+    });
+  });
 
-    // Check owner allocation
-    // Contract should have no more ERC20 token
-    await expect(await this.contract.balanceOf(this.contractAddress)).to.be.equal(0, "Invalid balance")
+  it("should match the expected allocation", async function () {
     
-    // And should have refund all the people, only have the ETH value from the sell
-    await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.equal(totalETHExpectedFromSell, "Invalid balance")
-
-    // But should now claimed some ETH
-    
-    await expect(await this.contract.balanceOf(this.owner)).to.be.equal(0, "Invalid balance")
-    const beforeOwnerETHBalance = await ethers.provider.getBalance(this.owner);
-    const transaction = await this.contract.claimETHToken();
-    const receipt = await transaction.wait()
-    const afterOwnerETHBalance = await ethers.provider.getBalance(this.owner);
-    expect(afterOwnerETHBalance).to.be.above(beforeOwnerETHBalance);
-
-    const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
-    expect(afterOwnerETHBalance).to.be.eq(beforeOwnerETHBalance - gasUsed + totalETHExpectedFromSell);
-
-    // expect(afterOwnerETHBalance).to.be.above(beforeOwnerETHBalance);
-
-
-    // TODO: Check alice allocation
-    // let beforeAliceEthBalance = await ethers.provider.getBalance(this.signers.alice.address);
-
 
 
   });
