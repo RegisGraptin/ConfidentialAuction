@@ -237,11 +237,22 @@ describe("ConfidentialAuction", function () {
         new AllocationParticipant({name: "dave", requestAmount: 1_000_000n, pricePerToken: 10_000_000n, expectedAllocation: 0n}),
       ] 
     },
+    // Bob   bids 0.000002 ether      | 2_000_000_000_000 wei | 500_000 tokens
+    // Carol bids 0.000008 ether      | 8_000_000_000_000 wei | 1_000_000 tokens
+    // David bids 0.00000000001 ether |        10_000_000 wei | 1_000_000 tokens
+    { 
+      settlePrice: 8_000_000_000_000n, 
+      participants: [
+        new AllocationParticipant({name: "bob", requestAmount: 500_000n, pricePerToken: 2_000_000_000_000n, expectedAllocation: 0n}),
+        new AllocationParticipant({name: "carol", requestAmount: 1_000_000n, pricePerToken: 8_000_000_000_000n, expectedAllocation: 1_000_000n}),
+        new AllocationParticipant({name: "dave", requestAmount: 1_000_000n, pricePerToken: 10_000_000n, expectedAllocation: 0n}),
+      ] 
+    },
   ];
 
   // Dynamically generate tests
   auctionScenario.forEach(({ settlePrice, participants }: {settlePrice: bigint, participants: AllocationParticipant[]}, index) => {
-    it(`should settle auction scenario ${index}`, async function () {
+    it(`should settle auction scenario ${index+1}`, async function () {
       await expect(await ethers.provider.getBalance(this.contractAddress)).to.be.eq(0);  
       let totalETHExpectedFromSell = settlePrice * 1_000_000n;
 
@@ -295,7 +306,7 @@ describe("ConfidentialAuction", function () {
           expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - gasUsed + BigInt(payBackAmount));
 
         } else {
-          await expect(await userWallet.refundBids(bidId)).to.be.reverted;
+          await expect(userWallet.refundBids(bidId)).to.be.reverted;
         }
         
         bidId++;
@@ -327,10 +338,6 @@ describe("ConfidentialAuction", function () {
 
 
   });
-
- // TODO: test less allocation
-
-
 
 
 });
