@@ -836,8 +836,8 @@
       ]
     },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/src/ConfidentialAuction.sol": {
-      "lastModificationDate": 1737200139365,
-      "contentHash": "0c6e38e4ee4a47ed33e6620128475a79",
+      "lastModificationDate": 1737282668423,
+      "contentHash": "3b046096f5e1c28a8b237d5839a56278",
       "sourceName": "src/ConfidentialAuction.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -891,8 +891,8 @@
       ]
     },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/src/interfaces/IConfidentialAuction.sol": {
-      "lastModificationDate": 1737199745636,
-      "contentHash": "a9e05968472d4804f6450eb711ef72a8",
+      "lastModificationDate": 1737282924087,
+      "contentHash": "0aa051990db65f0b6a3eff10fd18e368",
       "sourceName": "src/interfaces/IConfidentialAuction.sol",
       "solcConfig": {
         "version": "0.8.24",

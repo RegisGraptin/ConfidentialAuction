@@ -14,6 +14,7 @@ struct Bid {
     uint256 dPricePerUnit;
     bool confirmed;
     uint256 totalValueLock;
+    uint256 totalAllocation;
 }
 
 interface IConfidentialAuction {
@@ -25,6 +26,20 @@ interface IConfidentialAuction {
     /// @notice Returns the end time of the auction.
     /// @return The timestamp representing the end time of the auction.
     function endAuctionTime() external view returns(uint256);
+
+    /// @notice Returns the auction's settlement price.
+    /// @dev The settlement price is determined during the auction resolution phase.
+    ///      If there are insufficient valid bids to meet the allocation, the settlement 
+    ///      price is set to 0.
+    /// @return The settlement price defined when the auction is resolved. If there are 
+    ///         not enough valid bids, the price will be 0.
+    function auctionSettlePrice() external view returns(uint256);
+
+    /// @notice Returns the total token allocation defined for this auction.
+    /// @dev This represents the total number of tokens distributed to bidders during the auction.
+    ///      An auction is considered fully allocated if this value matches the initial supply of tokens.
+    /// @return The total token allocation for the auction.
+    function auctionAllocation() external view returns(uint256);
 
     /// @notice Retrieves the details of a specific bid by its ID.
     /// @param bidId The ID of the bid to retrieve.
@@ -148,40 +163,43 @@ interface IConfidentialAuction {
     function resolveAuction(uint256 numberToProcceed) external;
 
 
-    /// @notice Distributes the ERC20 tokens to successful bidders after the auction is resolved.
+    /// @notice Allocates the number of tokens to successful bidders after the confidential bids are resolved.
     /// @dev This function is called after all bids have been processed and organized based on the best price.
-    ///      It transfers the ERC20 tokens to the respective bidders according to their successful bids.
-    ///      Once all token transfers are completed, the ETH collected from the bidders during the auction
-    ///      will be sent to the owner. If any ERC20 tokens remain undistributed, due to insufficient bids,
-    ///      they will be sent to the owner.
-    /// @param numberToProceed The number of bidders to process in this call.
+    ///      It determines for all the bids the token allocation based on the auction settlement price.
+    ///      The allocation process may be executed iteratively to handle large data sets without exceeding gas limits.
+    /// @param numberToProceed The number of bids to process in this call.
     /// @custom:requirements
     /// - All bids must have been processed and decrypted before calling this function.
+    /// - The auction must be resolved and the settlement price determined.
     /// - The function should be called iteratively to handle a large number of bidders without running out of gas.
-    function distributeToken(uint256 numberToProceed) external;
+    function definedAllocation(uint256 numberToProceed) external;
 
-    /// @notice Refunds the ETH locked in an unsuccessful bid.
-    /// @dev This function is called to release and refund the ETH from a bid that was not successful.
-    ///      It ensures that the funds are refunded only after the auction has concluded and the bid status 
-    ///      has been marked as unsuccessful.
-    /// @param bidId The unique identifier of the unsuccessful bid to be refunded.
+
+    /// @notice Allows a user to claim the allocated tokens for a successful bid.
+    /// @dev This function is called to transfer the allocated ERC20 tokens to the bidder based on the resolved auction.
+    ///      It can only be called for bids with an allocation already defined.
+    /// @param bidId The ID of the bid for which the allocation is being claimed.
     /// @custom:requirements
-    /// - The auction must be concluded and the bid status must be unsuccessful.
-    function refundUnsuccessfulBids(uint256 bidId) external;
+    /// - The bid must have an allocation defined.
+    /// - The caller must be the owner of the bid.
+    /// - The auction must be resolved and the settlement price determined.
+    function claimAllocation(uint256 bidId) external;
 
-    /// @notice Distribute the ETH cumulated during the auction to the owner.
-    /// @dev This function is called by the owner to claimed the ETH won. 
+
+    /// @notice Refunds the ETH locked for a given bid.
+    /// @dev This function is called to release and refund the ETH from a bid. It ensures that the funds
+    ///      are refunded only after the auction has concluded. In case where the user get a token allocation,
+    ///      he will have to first claimed it before being able to get refund for the remaining ETH. 
+    /// @param bidId The unique identifier of the bid to be refunded.
+    /// @custom:requirements
+    /// - The auction must be concluded.
+    function refundBids(uint256 bidId) external;
+
+
+    /// @notice Distribute the ETH from the sell auction. The amount is computed based on the settlement price
+    ///         defined when resolving the auction.
+    /// @dev This function is called by the owner to claimed the ETH won.
     /// @custom:requirements
     /// - The auction must be concluded and all the token should have been distributed.
-
-    /// @notice Distributes the ETH accumulated from the sale of tokens during the auction to the owner.
-    /// @dev This function allows the owner to claim the ETH that has been collected exclusively
-    ///      from the sale of tokens in the auction. The auction must be concluded, all the ERC20 tokens 
-    ///      should have been distributed, and no bids should remain unprocessed before calling this function.
-    /// @custom:requirements
-    /// - The auction must be concluded (i.e., the end time has passed).
-    /// - All tokens must have been successfully distributed to the winning bidders.
-    /// - The owner must be the caller of the function.
     function claimETHToken() external;
-
 }

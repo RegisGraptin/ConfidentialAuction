@@ -216,9 +216,11 @@ describe("ConfidentialAuction", function () {
       this.expectedAllocation = expectedAllocation;
     } 
 
-    getExpectedEthBack(): bigint {
-      return (this.requestAmount - this.expectedAllocation) * this.pricePerToken;
+    getExpectedEthBack(settlementPrice: bigint): bigint {
+      return (this.requestAmount * this.pricePerToken) - (this.expectedAllocation * settlementPrice);
     }
+
+
   }
 
   
@@ -232,7 +234,10 @@ describe("ConfidentialAuction", function () {
 
     // TODO: Nice you have done a multi price auction !!!
     // Don't give up man !
-    let totalETHExpectedFromSell = 5_600_000_000_000_000_000n;
+    // Multi auction price - 5_600_000_000_000_000_000n
+    
+    let expectedSettlementPrice = 2_000_000_000_000n;
+    let totalETHExpectedFromSell = 2_000_000_000_000_000_000n;
 
     let config: ConfigUser[] = [
       new ConfigUser({name: "bob", requestAmount: 500_000n, pricePerToken: 2_000_000_000_000n, expectedAllocation: 400_000n}),
@@ -256,28 +261,32 @@ describe("ConfidentialAuction", function () {
     await this.resolveAuction();
 
     // Proceed with the token distribution
-    await this.contract.distributeToken(5);
+    await this.contract.definedAllocation(5);
     
     // The contract should have distributed all the ERC20 token
-    await expect(await this.contract.balanceOf(this.contractAddress)).to.equal(0n, "Invalid balance");
+    // await expect(await this.contract.balanceOf(this.contractAddress)).to.equal(0n, "Invalid balance");
 
-    // Check user allocation
-    for (let user of config) {
-      await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
-    };
-
+    
     // Check user payback 
     bidId = 0
     for (let user of config) {
-      let payBackAmount = user.getExpectedEthBack();
+      let payBackAmount = user.getExpectedEthBack(expectedSettlementPrice);
       let userAddress = this.signers[user.name].address;
       let userWallet = this.contract.connect(this.signers[user.name]);
 
-      if (payBackAmount > 0) {
+      // The user should have an allocation
+      if (user.expectedAllocation > 0) {
+        await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(0, "Invalid user balance");
+        await userWallet.claimAllocation(bidId);
+        await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
+      }
+
+      // If not allocation or get back eth locked
+      if (payBackAmount > BigInt(0)) {
         // We should get back the original tokens
         const userEthBalanceBefore = await ethers.provider.getBalance(userAddress);
 
-        const transaction =  await userWallet.refundUnsuccessfulBids(bidId);
+        const transaction =  await userWallet.refundBids(bidId);
         const receipt = await transaction.wait();
 
         const gasUsed = BigInt(receipt.gasUsed * receipt.gasPrice);
@@ -286,10 +295,12 @@ describe("ConfidentialAuction", function () {
         expect(userEthBalanceAfter).to.be.eq(userEthBalanceBefore - gasUsed + BigInt(payBackAmount));
 
       } else {
-        // the transaction should revert as we have no more token available
-        await expect(userWallet.refundUnsuccessfulBids(bidId)).to.be.reverted;
+        await expect(await userWallet.refundBids(bidId)).to.be.reverted;
       }
       
+      // Check user allocation
+      await expect(await this.contract.balanceOf(this.signers[user.name].address)).to.equal(user.expectedAllocation, "Invalid user balance");
+
       bidId++;
     }
 

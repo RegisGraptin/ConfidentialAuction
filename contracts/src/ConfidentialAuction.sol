@@ -42,7 +42,15 @@ contract ConfidentialAuction is
     uint256 private _pendingGatewayItems;
 
     /// @notice Total amount of ETH raised during the auction
-    uint256 public totalEthFromSale;
+    // FIXME: remvoe
+    // uint256 public totalEthFromSale;
+
+
+    
+    uint256 public auctionSettlePrice;
+    
+    uint256 public auctionAllocation;
+
 
     /// @notice Indicates whether the owner has claimed the ETH after the auction sale.
     bool public ethClaimedAfterSell;
@@ -142,7 +150,8 @@ contract ConfidentialAuction is
             dRequestedAmount: 0,
             dPricePerUnit: 0,
             confirmed: false,
-            totalValueLock: 0
+            totalValueLock: 0,
+            totalAllocation: 0
         });
 
         // Save the bid for the user
@@ -225,22 +234,24 @@ contract ConfidentialAuction is
         }
     }
 
-    function distributeToken(uint256 numberToProceed) external override nonReentrant {
+    function definedAllocation(uint256 numberToProceed) external override nonReentrant {
         if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
         if (_pendingGatewayItems > 0) revert PendingGatewayProcess();
         if (lastBidProcessed < nextBidId) revert PendingBidsToProcess();
         
         while (
             numberToProceed > 0 
-            && balanceOf(address(this)) > 0 // We still have token to distribute
+            && auctionAllocation < totalSupply() // We still have token to distribute
             && _priceOrderTree.root != 0    // We still have available bids
         ) {
             // Get the last descending price
             uint256 keyPrice = _priceOrderTree.last();
 
+            auctionSettlePrice = keyPrice;
+
             // Get associated bids for this price
             while (
-                balanceOf(address(this)) > 0
+                auctionAllocation < totalSupply()
                 && _orderedAuctionPerUser[keyPrice].length > 0
             ) {
                 if (numberToProceed == 0) {  // Stop the process
@@ -253,21 +264,15 @@ contract ConfidentialAuction is
                 _orderedAuctionPerUser[keyPrice].pop();
 
                 // Compute the number of token to send
-                uint256 tokenToSend = Math.min(balanceOf(address(this)), _bids[bidId].dRequestedAmount);
-
-                uint256 ethValue = tokenToSend * _bids[bidId].dPricePerUnit;
-
-                // Increase the claimed eth value
-                totalEthFromSale += ethValue;
-
-                // Update the token paid value
-                _bids[bidId].totalValueLock -= ethValue;
+                
+                // Defined the token allocation for this bid
+                uint256 allocation = Math.min(totalSupply() - auctionAllocation, _bids[bidId].dRequestedAmount);
+                
+                _bids[bidId].totalAllocation = allocation;
+                auctionAllocation += allocation;
 
                 // Emit and event
-                emit AuctionTokenTransferred(_bids[bidId].user, tokenToSend);
-
-                // Transfer to the user
-                _transfer(address(this), _bids[bidId].user, tokenToSend);
+                // FIXME: REMOVE: emit AuctionTokenTransferred(_bids[bidId].user, tokenToSend);
 
                 numberToProceed--;
             }
@@ -281,20 +286,55 @@ contract ConfidentialAuction is
         // but we still have tokens, we send them to the owner.
         if (
             numberToProceed > 0 
-            && balanceOf(address(this)) > 0 // We still have token to distribute
-            && _priceOrderTree.root == 0
+            && auctionAllocation < totalSupply() // We still have token to distribute
+            && _priceOrderTree.root == 0         // We have explored all the bids
         ) {
-            emit AuctionTokenTransferred(this.owner(), balanceOf(address(this)));
-            _transfer(address(this), this.owner(), balanceOf(address(this)));
+            auctionSettlePrice = 0;
+
+            // FIXME: Remove
+            // emit AuctionTokenTransferred(this.owner(), balanceOf(address(this)));
+            // _transfer(address(this), this.owner(), balanceOf(address(this)));
         }
     }
 
-    function refundUnsuccessfulBids(uint256 bidId) external override nonReentrant {
-        if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
+
+    // Settlement price = 0 => refund all
+    
+
+
+    function claimAllocation(uint256 bidId) external override nonReentrant {
+        if (auctionSettlePrice == 0) revert();
+        if (auctionAllocation < totalSupply()) revert();
+
         if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
         if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
         if (_bids[bidId].totalValueLock == 0) revert NoTokensLocked();
-        
+
+
+        // Update allocation and ETH price
+        uint256 allocation = _bids[bidId].totalAllocation;
+        _bids[bidId].totalAllocation = 0;
+        _bids[bidId].totalValueLock -= allocation * auctionSettlePrice;
+
+        // FIXME: EMIT
+
+        _transfer(address(this), _bids[bidId].user, allocation);
+    }
+
+
+    // FIXME: rename/adjust 
+    // function refundUnsuccessfulBids(uint256 bidId) external override nonReentrant {
+    function refundBids(uint256 bidId) external override nonReentrant {
+        // if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute(); // FIXME: Need to manage this behaviour
+        if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
+        if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
+        if (_bids[bidId].totalValueLock == 0) revert NoTokensLocked();
+        if (auctionSettlePrice > 0 && _bids[bidId].totalAllocation > 0) {
+            revert NoTokensLocked(); // FIXME: need to claim first
+        }
+
+        // Check either the user has ETH lock or token to claimed!!
+
         uint256 unlockAmount = _bids[bidId].totalValueLock;
 
         // Update the value
@@ -313,7 +353,7 @@ contract ConfidentialAuction is
 
         ethClaimedAfterSell = true;
 
-        (bool success, ) = msg.sender.call{ value: totalEthFromSale }("");
+        (bool success, ) = msg.sender.call{ value: auctionSettlePrice * totalSupply() }("");
         require(success, "Refund failed");
     }
 

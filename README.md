@@ -9,6 +9,10 @@ This repository present a smart contract approach for a confidential single pric
 
 
 
+Single price auction
+
+
+In case of no settlement, all the token are sent to the owner and the users can get refund.
 
 
 
@@ -100,3 +104,12 @@ Paid: 0.08666734821799857 ETH (2755929 gas * 31.44759833 gwei)
 
 ✅ Sequence #1 on sepolia | Total Paid: 0.08666734821799857 ETH (2755929 gas * avg 31.44759833 gwei)
           
+
+
+// TODO: https://en.wikipedia.org/wiki/Single-price_auction
+
+bid1 = 100
+bid2 = 200
+
+sum(token) if settle price ==> OK 
+                        else no
