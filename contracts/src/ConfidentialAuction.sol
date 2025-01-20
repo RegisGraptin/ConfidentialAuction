@@ -294,6 +294,7 @@ contract ConfidentialAuction is
 
     function claimAllocation(uint256 bidId) external override nonReentrant {
         if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        if (auctionSettlePrice == 0) revert AuctionFailedError();
         if (auctionAllocation < totalSupply()) revert PendingBidsToProcess();
         if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
         if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
@@ -310,15 +311,15 @@ contract ConfidentialAuction is
         _transfer(address(this), _bids[bidId].user, allocation);
     }
 
-    // FIXME: Check either the user has ETH lock or token to claimed!!
+    /// @dev If the users has an allocation, he should claimed it first before getting refund.
     function refundBids(uint256 bidId) external override nonReentrant {
         if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
         
         // Check Bid details
         if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
         if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
-        if (_bids[bidId].totalAllocation > 0) revert AllocationNotClaimed(bidId);
         if (_bids[bidId].totalValueLock == 0) revert NoTokensLocked();
+        if (auctionSettlePrice > 0 && _bids[bidId].totalAllocation > 0) revert AllocationNotClaimed(bidId);
 
         // Check we have finished the auction
         if (auctionAllocation == 0) revert PendingBidsToProcess();
