@@ -41,16 +41,12 @@ contract ConfidentialAuction is
     /// @notice Number of items that are pending to be processed by the ZAMA Gateway
     uint256 private _pendingGatewayItems;
 
-    /// @notice Total amount of ETH raised during the auction
-    // FIXME: remvoe
-    // uint256 public totalEthFromSale;
-
-
-    
+    /// @notice Auction settlement price defined after the resolution phase if sufficient bids.
     uint256 public auctionSettlePrice;
     
+    /// @notice Total number of tokens to be distributed to the bidders.
+    ///         In case insufficient bidders, the auction is canceled.
     uint256 public auctionAllocation;
-
 
     /// @notice Indicates whether the owner has claimed the ETH after the auction sale.
     bool public ethClaimedAfterSell;
@@ -69,8 +65,6 @@ contract ConfidentialAuction is
 
     /// @dev This contract uses the BokkyPooBahsRedBlackTreeLibrary to efficiently manage and order price of the bid.
     ///      It will help us during the resolution where we can have the price sorted and resolve the bid accordingly.
-
-    /// @dev This contract uses the BokkyPooBahsRedBlackTreeLibrary to efficiently manage and order the prices of bids.
     using BokkyPooBahsRedBlackTreeLibrary for BokkyPooBahsRedBlackTreeLibrary.Tree;
     BokkyPooBahsRedBlackTreeLibrary.Tree internal _priceOrderTree;
 
@@ -272,7 +266,7 @@ contract ConfidentialAuction is
                 auctionAllocation += allocation;
 
                 // Emit and event
-                // FIXME: REMOVE: emit AuctionTokenTransferred(_bids[bidId].user, tokenToSend);
+                emit BidAllocationSet(bidId, _bids[bidId].user, allocation);
 
                 numberToProceed--;
             }
@@ -282,8 +276,9 @@ contract ConfidentialAuction is
             _priceOrderTree.remove(keyPrice);
         }
 
-        // In the particular case where we have explored all the bids
-        // but we still have tokens, we send them to the owner.
+        // In the particular case where we have explored all the bids but we had not enough
+        // allocation, we are cancelling the auction.
+        // We send all the token to the owner. 
         if (
             numberToProceed > 0 
             && auctionAllocation < totalSupply() // We still have token to distribute
@@ -291,24 +286,18 @@ contract ConfidentialAuction is
         ) {
             auctionSettlePrice = 0;
 
-            // FIXME: Remove
-            // emit AuctionTokenTransferred(this.owner(), balanceOf(address(this)));
-            // _transfer(address(this), this.owner(), balanceOf(address(this)));
+            emit AuctionFailed(auctionAllocation, totalSupply());
+
+            _transfer(address(this), this.owner(), totalSupply());            
         }
     }
 
-
-    // Settlement price = 0 => refund all
-    
-
-
     function claimAllocation(uint256 bidId) external override nonReentrant {
-        if (auctionSettlePrice == 0) revert();
-        if (auctionAllocation < totalSupply()) revert();
-
+        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        if (auctionAllocation < totalSupply()) revert PendingBidsToProcess();
         if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
         if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
-        if (_bids[bidId].totalValueLock == 0) revert NoTokensLocked();
+        if (_bids[bidId].totalAllocation == 0) revert NoAllocation();
 
 
         // Update allocation and ETH price
@@ -316,31 +305,33 @@ contract ConfidentialAuction is
         _bids[bidId].totalAllocation = 0;
         _bids[bidId].totalValueLock -= allocation * auctionSettlePrice;
 
-        // FIXME: EMIT
+        emit AuctionAllocationTransferred(bidId, _bids[bidId].user, allocation);
 
         _transfer(address(this), _bids[bidId].user, allocation);
     }
 
-
-    // FIXME: rename/adjust 
-    // function refundUnsuccessfulBids(uint256 bidId) external override nonReentrant {
+    // FIXME: Check either the user has ETH lock or token to claimed!!
     function refundBids(uint256 bidId) external override nonReentrant {
-        // if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute(); // FIXME: Need to manage this behaviour
+        if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
+        
+        // Check Bid details
         if (_bids[bidId].user != msg.sender) revert UnauthorizedUser(_bids[bidId].user, msg.sender);
         if (!_bids[bidId].confirmed) revert BidNotConfirmed(bidId);
+        if (_bids[bidId].totalAllocation > 0) revert AllocationNotClaimed(bidId);
         if (_bids[bidId].totalValueLock == 0) revert NoTokensLocked();
-        if (auctionSettlePrice > 0 && _bids[bidId].totalAllocation > 0) {
-            revert NoTokensLocked(); // FIXME: need to claim first
-        }
 
-        // Check either the user has ETH lock or token to claimed!!
+        // Check we have finished the auction
+        if (auctionAllocation == 0) revert PendingBidsToProcess();
+        if (auctionSettlePrice > 0 && auctionAllocation < totalSupply()) revert PendingBidsToProcess();
 
+        // Here we should either be in a failed allocation, meaning a auctionSettlePrice = 0
+        // Or have allocate all the token: auctionAllocation >= totalSupply()
+        
+        // Update the value in the bid
         uint256 unlockAmount = _bids[bidId].totalValueLock;
-
-        // Update the value
         _bids[bidId].totalValueLock = 0;
 
-        emit UnsuccessfulBidRefunded(bidId, msg.sender, unlockAmount);
+        emit BidRefunded(bidId, msg.sender, unlockAmount);
 
         (bool success, ) = msg.sender.call{ value: unlockAmount }("");
         require(success, "Refund failed");
@@ -348,10 +339,14 @@ contract ConfidentialAuction is
 
     function claimETHToken() public override onlyOwner nonReentrant {
         if (block.timestamp <= endAuctionTime) revert AuctionNotFinished();
-        if (balanceOf(address(this)) > 0) revert RemainingTokensToDistribute();
         if (ethClaimedAfterSell) revert ETHAlreadyClaimed();
 
+        // Check that the auction went properly
+        if (auctionSettlePrice == 0) revert AuctionFailedError();
+        if (auctionAllocation < totalSupply()) revert PendingBidsToProcess();
+
         ethClaimedAfterSell = true;
+        emit AuctionETHClaimed(msg.sender, auctionSettlePrice * totalSupply());
 
         (bool success, ) = msg.sender.call{ value: auctionSettlePrice * totalSupply() }("");
         require(success, "Refund failed");

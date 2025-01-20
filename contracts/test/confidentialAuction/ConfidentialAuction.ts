@@ -340,5 +340,13 @@ describe("ConfidentialAuction", function () {
   });
 
 
+  // Test scenario 
+  //  - Not enough participants
+  //  - Owner pay first, then others
+  //  - Check condition of claimed in the smart contract
+  // 
+
+  // TODO: UPDATE error code & double check condition + test
+
 });
 

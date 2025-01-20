@@ -54,6 +54,7 @@ interface IConfidentialAuction {
 
     error AuctionAlreadyFinished();
     error AuctionNotFinished();
+    error AuctionFailedError();
     error InvalidEndAuctionTime(uint256 providedEndTime, uint256 currentTime);
     
     error InvalidBidId(uint256 providedBidId, uint256 nextBidId);
@@ -67,6 +68,8 @@ interface IConfidentialAuction {
     error PendingBidsToProcess();
     
     error NoTokensLocked();
+    error NoAllocation();
+    error AllocationNotClaimed(uint256 bidId);
     error ETHAlreadyClaimed();
     error RemainingTokensToDistribute();
     
@@ -91,15 +94,32 @@ interface IConfidentialAuction {
         uint256 refundAmount    // Amount of ETH refunded to the user.
     );
 
-    event AuctionTokenTransferred(
-        address indexed recipient, // Address of the user receiving the tokens.
-        uint256 amount             // Number of tokens transferred.
+    event BidAllocationSet (
+        uint256 indexed bidId,     // Unique identifier of the bid.
+        address indexed recipient, // Address of the bid user.
+        uint256 allocation         // Number of tokens allocated.
     );
 
-    event UnsuccessfulBidRefunded(
-        uint256 indexed bidId,  // The unique identifier of the bid being refunded.
-        address indexed bidder, // Address of the bidder who is receiving the refund.
-        uint256 amount          // Amount of ETH refunded to the bidder.
+    event AuctionETHClaimed(
+        address indexed owner, // The address of the auction owner who is claiming the ETH.
+        uint256 ethAmount      // The total amount of ETH claimed.
+    );
+
+    event AuctionFailed (
+        uint256 auctionAllocation, // Total allocation achieved during the auction.
+        uint256 tokenSupply        // Total token supply at the start of the auction.
+    );
+
+    event AuctionAllocationTransferred(
+        uint256 indexed bidId,     // Unique identifier of the bid.
+        address indexed bidder,    // Address of the bidder receiving the allocated tokens.
+        uint256 allocatedAmount    // Amount of tokens transferred to the bidder.
+    );
+
+    event BidRefunded(
+        uint256 indexed bidId,     // Unique identifier of the bid being refunded.
+        address indexed bidder,    // Address of the bidder receiving the refund.
+        uint256 refundAmount       // Amount of ETH refunded to the bidder.
     );
 
     event GatewayTotalValueRequested(
