@@ -836,8 +836,8 @@
       ]
     },
     "/home/rere/Projects/ConfidentialSinglePriceAuction/contracts/src/ConfidentialAuction.sol": {
-      "lastModificationDate": 1737355027620,
-      "contentHash": "64b972561d6e180ff17722ddf5c5198e",
+      "lastModificationDate": 1737355910041,
+      "contentHash": "68c0890b8870c705181105693fab49e8",
       "sourceName": "src/ConfidentialAuction.sol",
       "solcConfig": {
         "version": "0.8.24",

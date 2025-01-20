@@ -1,87 +1,101 @@
+<a id="readme-top"></a>
 
-# Build a Confidential Single-Price Auction for Tokens with Sealed Bids using Zama's fhEVM
-> https://github.com/zama-ai/bounty-program/issues/136
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/RegisGraptin/ConfidentialAuction">
+    <img src="./logo.png" alt="Logo" width="250" height="250">
+  </a>
 
-
-## Description 
-
-This repository present a smart contract approach for a confidential single price auction using sealed bids using Zama.
-
-
-
-Single price auction
-
-
-In case of no settlement, all the token are sent to the owner and the users can get refund.
-
-
-
-An auction owner can create/launch a Single-Price Auction for a quantity of assets (e.g. ERC20) to be sold using either ether or an ERC20 token.
-
-Each participant, who wants to buy assets, can place an encrypted bid (the number of tokens to purchase and the price that each participant is willing to pay). The settlement price is the price at which the last token is bought. This price is paid by everyone regardless on the initial bids.
-
-If the auction does not sell fully (e.g. no participant, not enough participant), it is up to the developer to decide what should be the best resolution mechanism (e.g. refund mechanism, execution at the lowest price).
+<h3 align="center">Confidential Single-Price Auction</h3>
+<p align="center" style="font-style: italic; font-size: 1.2em;">Built during <a href="https://github.com/zama-ai/bounty-program/issues/136">ZAMA Bounty Program - Season 7</a></p>
+  <p align="center">
+    A decentralized confidential single-price auction for tokens with sealed bids.
+    <br />
+    <br />
+    <a href="https://github.com/RegisGraptin/ConfidentialAuction">View Demo</a>
+  </p>
+</div>
 
 
-## Features ??
+## About The Project
+
+This repository provides a smart contract implementation for a Confidential Single-Price Auction using sealed bids, powered by Zama's fhEVM (Fully Homomorphic Encryption on Ethereum Virtual Machine).
+
+In this auction model, the auction owner can launch a single-price auction for a specified quantity of assets (e.g., ERC20 tokens) to be sold in exchange for ether. The auction ensures confidentiality during the bidding process, as each participant submits an encrypted bid specifying both the number of tokens they wish to purchase and the price they are willing to pay.
 
 
-- At the moment, the focus is done in gas token here ETH
-- If not enough participant, the auction is still execute and the remaining tokens go to the owner of the ERC20 (assuming the team is behind it)
+## Features
 
-- A user can place multiple bid - Create mutliple bid
-- Cancel an existing bid
+- Token Customization: The auction owner can parameterize the token details (e.g., name, symbol) and set the auction duration. The auction utilizes gas (ETH) as the payment method for the sale.
 
-- Parameterize auction time 
+- Encrypted Bids: Participants submit bids by encrypting both the number of tokens they wish to purchase and the price they are willing to pay. This ensures bid confidentiality throughout the auction process. After the auction ends, the encrypted bids are decrypted for resolution.
 
-- Bid resolution on first come first serve
-- When confirming the bid, the funds are lock
+- Settlement Price: Once the encrypted bids are decrypted, the settlement price is determined based on the highest accepted bid. This price becomes the official price at which tokens are sold.
 
+- Refund Mechanism: If the auction is not fully filled (i.e., there are insufficient bids), all participants are refunded, and the auction owner retains the unsold tokens.
 
+- Multiple Bids: Participants can place multiple bids throughout the auction. Each time a bid is confirmed, the required amount of ETH is locked.
 
+- Bid Cancellation: Participants have the option to cancel their bids during the auction process.
 
-## How does it works
+- First-Come, First-Served Resolution: In cases where multiple bids are placed at the same price, bids are resolved on a first-come, first-served basis, ensuring fairness in the distribution of tokens.
 
-1. Bid
-2. Resolution
-3. Distribution
+## How does it works 
 
+The confidential auction process is divided into three distinct phases:
 
-### Bid process
+1. Bid phase
+2. Resolution phase
+2. Allocation phase
+3. Distribution phase
 
-First, a user will create a new smart contract, which is a ERC20 derived. So, he can customize the token name, symbol and defined the supply for his new tokens. In addition, he will provide an additional parameter to defined the end time of the auction. 
+### Bid phase
 
-Once the token created, it is direclty available to bid. Users will have the possibility to submit a bid by hidding the amount of token request and the price. In the current workflow, the total value will be decrypted as we need this information for the user to lock the given amount of token. During the bid process, only the total amount requested will be reveal. This is where the Gateway from Zama is going to be requested to decypher it.
+In the Bid Phase, the auction owner creates a new Confidential Auction smart contract based on an ERC20-derived token. This contract allows the owner to customize the token by defining the name, symbol and the supply. It also allow him to defined the auction's end time.
 
-Then the user will have to confirm the bid by providing the expected eth value matching the total value requests. This amount will be lock into the smart contract during the resolve phase. Before it, if at some point the user after having confirmed his bid, want to cancel it, he have the possibility to do it and get back the eth locked. Notice that this could happened only while the we are in the bid process phase. Else the amount will be lock until the resolution phase is done.
+Once the token is created, it becomes available for bidding. Participants can place bids, but the details of their bids (i.e., the number of tokens and the price they are willing to pay) are encrypted to ensure confidentiality. However, during the bidding creation, we request to decrypt the total value of the bid, which represent the total amount the user needs to lock in ETH to confirm his bid. This decryption processed is handle by the Zama Gateway. 
 
-Notice also, that the user can have the possibility to create as many bid as he want.
+Once the total value decrypted, the user can confirm his bid, by providing the expected ETH value matching his bid value. The ETH amount is then lock into the smart contract until the distribution phases. 
 
+Note that while the bid phase going on, participants have the possibility to cancel there bids. Also, a participant can place as many bids as they wish during the Bid Phase, with each bid being independently confirmed and locked.
 
-To illustrate this phase workflow, let's say we have Charlie that wants to invest in our new token. Charlie will make a bid for 50 000 tokens with a price of 0.00002 eth per token. Those two information will be encrypted, and no one during the bid process phase can know this information. The only information we have is when Charlie will create his bid, we will request the Gateway to decypher the product of the number of tokens request time the price per unit (here 1 eth). Once the Gateway provide this value, Charlie will have the possibility to confirm his bid by locking 1 eth to the smart contract. Until the next phase start, when we still are before the end time of the auction, Charlie can cancel his bid and get back his 1 ETH.
+#### Example workflow
+
+To illustrate this phase workflow, let's say we have Charlie who wants to invest in our new token.
+
+1. Charlie places his bid: Charlie’s bid details (50,000 tokens and 0.00002 ETH) are encrypted. At this stage, no one knows the bid details.
+2. The Gateway is invoked: The smart contract requests Zama’s Gateway to decrypt the total value (50,000 * 0.00002 ETH = 1 ETH).
+3. Charlie confirms his bid: After the total value decrypted, Charlie can now confirm his bid by locking 1 ETH into the contract.
+4. Charlie has the option to cancel: As long as the auction is still ongoing, Charlie can cancel his bid and get the 1 ETH refunded. If he decides not to cancel, the ETH remains locked until the auction moves to the Resolution Phase.
 
 
 ### Resolution phase
 
-Once the date of the end time auction passed, this unlock the possibility to anyone to resolve the auction. In this process, we are going to iterate over all the confirmed bids, and using the Gateway, request to decypher the bid parameter. 
-When doing so, we are going to have access to all the request amount and price per token of the bid. 
-During the resolution process, we are going to arrange and sort the bid based on the price, allowing us to iterate over them in the right order during the distribution. 
+Once the auction's end time has passed, the auction can be resolved. During this phase, the smart contract iterates over all confirmed bids and requests the Gateway to decrypt the bid parameters, including the number of tokens and the price per token for each bid.
 
-For that we are using two data structure. The first one is [BokkyPooBah's Red-Black Binary Search Tree Library](https://github.com/bokkypoobah/BokkyPooBahsRedBlackTreeLibrary) allowing us to store in an order way and search efficiently the price per token. The second is a mapping, allowing us given a price per token to store all the bid associated. 
-Thoses two data structure allow us, in an efficiant way, to iterate downwards on the price per token.
+Once the bid parameters are revealed, the smart contract sorts the bids based on the requested price, ensuring that they are processed in the correct order during the allocation phase. To handle this efficiently, two data structures are used:
 
-Notice that by our design approach, we are following a first come first serve approach in the bid. Meaning that for a same price for two bids, we will fill the first one first then the second one. 
+- Red-Black Tree: We use [BokkyPooBah's Red-Black Binary Search Tree Library](https://github.com/bokkypoobah/BokkyPooBahsRedBlackTreeLibrary) to store and sort the bids by price, allowing us to fetch and process bids efficiently.
+
+- Mapping: A mapping associates each price with a list of bids placed at that price. This mapping ensures that, in the case of identical bid prices, the bids are handled according to the First Come, First Served model, respecting the order in which they were placed.
+
+
+### Allocation phase
+
+Once all bids are processed, the smart contract determines the settlement price of the auction and the token allocation for each bid.
+
+During this phase, the smart contract iterates through the valid bids in descending order of price, allocating tokens to bids until the available supply is exhausted. Once the token supply is exhausted, the settlement price is determined, and the process moves to the distribution phase.
+
+However, if there are insufficient bids to cover the entire token supply, the auction tokens are transferred to the owner and participants can refund their ETH bidding amounts.
 
 ### Distribution phase
 
-Once all the bids resolved, we can now proceed to the distribution phase. For this one, we are iterating over all the bids, in a downwards way according to the price, and going to distribute the token requested until we have distributed all the token. 
+Once the token allocation is complete, participants with an allocation must first claim it to receive the auction tokens.
 
-In the case where we still have undistributed token, this one will be sent to the owner of the smart contract. 
+After claiming their tokens, participants may refund any excess ETH paid if the settlement price is lower than their bid. In case a participant does not have an allocation, they can directly refund their ETH.
 
-Finally, once the token distributed, the owner have the possibility to claimed the total eth amount from the sale and the users whose bids haven't been fill in can refund they lock eth.
-
-
-
+Finally, the auction owner can claim the ETH corresponding to the auction's sale.
 
 
 # Business startegy
