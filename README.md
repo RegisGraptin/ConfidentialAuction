@@ -4,7 +4,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/RegisGraptin/ConfidentialAuction">
-    <img src="./logo.png" alt="Logo" width="250" height="250">
+    <img src="./logo_background.jpeg" alt="Logo" width="250" height="250">
   </a>
 
 <h3 align="center">Confidential Single-Price Auction</h3>
@@ -49,6 +49,8 @@ The confidential auction process is divided into three distinct phases:
 2. Resolution phase
 2. Allocation phase
 3. Distribution phase
+
+
 
 ### Bid phase
 
