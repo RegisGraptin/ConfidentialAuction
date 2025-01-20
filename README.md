@@ -52,7 +52,7 @@ The confidential auction process is divided into three distinct phases:
 
 
 
-### Bid phase
+### Bid phase
 
 In the Bid Phase, the auction owner creates a new Confidential Auction smart contract based on an ERC20-derived token. This contract allows the owner to customize the token by defining the name, symbol and the supply. It also allow him to defined the auction's end time.
 
