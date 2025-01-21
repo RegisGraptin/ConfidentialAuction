@@ -6,7 +6,6 @@ import styles from "../styles/Home.module.css";
 import PrivateAuction from "../abi/PrivateAuction.json";
 import { useReadContract } from "wagmi";
 import { Address } from "viem";
-import CreateAuctionForm from "../components/CreateAuctionForm";
 import React from "react";
 import { createFHEInstance } from "../lib/fhe";
 import Header from "../components/Header";
@@ -48,14 +47,18 @@ const Home: NextPage = () => {
       {/* Hero Section */}
       <header className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-20 px-4">
         <div className="max-w-7xl mx-auto text-center">
-          {/* <h1 className="text-5xl font-bold mb-6">...</h1> Decentralized Confidential Auctions */}
+          <h1 className="text-5xl font-bold mb-6">
+            Decentralized Confidential Auctions
+          </h1>
           <p className="text-lg md:text-xl mb-8">
             Launch your token securely and bid with confidence on our sealed-bid
             auction platform.
           </p>
-          <button className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold shadow-lg hover:bg-gray-200 transition-transform transform hover:scale-105">
-            View Demo
-          </button>
+          <a href="/auction/create" title="Create an auction">
+            <button className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold shadow-lg hover:bg-gray-200 transition-transform transform hover:scale-105">
+              Create an auction
+            </button>
+          </a>
         </div>
       </header>
 
