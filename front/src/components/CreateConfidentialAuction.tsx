@@ -8,9 +8,10 @@ import { initFhevm, createInstance } from "fhevmjs/bundle";
 import React, { FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { getFHEInstance } from "../lib/fhe";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export default function CreateAuctionForm() {
-  const { address: userAddress } = useAccount();
+  const { address: userAddress, isConnected } = useAccount();
 
   // React.useEffect(() => {
   //     init();
@@ -57,8 +58,11 @@ export default function CreateAuctionForm() {
   return (
     <div>
       <form className="max-w-sm mx-auto" onSubmit={createAuction}>
+        <div className="flex justify-center">
+          <ConnectButton />
+        </div>
         <div>
-          <div className="flex">
+          <div className="flex pt-5">
             <span className="inline-flex items-center px-3 text-sm text-gray-900 bg-gray-200 border border-e-0 border-gray-300 rounded-s-md">
               <MdDriveFileRenameOutline />
             </span>
@@ -113,10 +117,11 @@ export default function CreateAuctionForm() {
           </div>
         </div>
 
-        <div className="pt-5">
+        <div className="flex justify-center pt-5">
           <button
             type="submit"
-            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none"
+            className={`text-white font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 focus:outline-none ${isConnected ? "bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300" : "bg-blue-400"}`}
+            disabled={!isConnected}
           >
             Create an auction
           </button>
