@@ -3,7 +3,7 @@ import type { NextPage } from "next";
 import Head from "next/head";
 import styles from "../styles/Home.module.css";
 
-import PrivateAuction from "../abi/PrivateAuction.json";
+import ConfidentialAuction from "../abi/ConfidentialAuction.json";
 import { useReadContract } from "wagmi";
 import { Address } from "viem";
 import React from "react";
@@ -18,14 +18,14 @@ const Home: NextPage = () => {
 
   const { data: tokenName } = useReadContract({
     address: process.env.NEXT_PUBLIC_CONTRACT as Address,
-    abi: PrivateAuction.abi,
+    abi: ConfidentialAuction.abi,
     functionName: "name",
     args: [],
   });
 
   const { data: endAuctionTime } = useReadContract({
     address: process.env.NEXT_PUBLIC_CONTRACT as Address,
-    abi: PrivateAuction.abi,
+    abi: ConfidentialAuction.abi,
     functionName: "endAuctionTime",
     args: [],
   });

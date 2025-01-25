@@ -5,55 +5,66 @@ import {
 } from "react-icons/md";
 import { FaSortAmountUpAlt } from "react-icons/fa";
 import { initFhevm, createInstance } from "fhevmjs/bundle";
-import React, { FormEvent } from "react";
-import { useAccount } from "wagmi";
+import React, { FormEvent, useEffect } from "react";
+import {
+  useAccount,
+  useDeployContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { getFHEInstance } from "../lib/fhe";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+
+import ConfidentialAuction from "../abi/ConfidentialAuction.json";
+import { useRouter } from "next/navigation";
 
 export default function CreateAuctionForm() {
   const { address: userAddress, isConnected } = useAccount();
 
-  // React.useEffect(() => {
-  //     init();
-  // }, [userAddress]);
+  const { deployContract, isPending, data } = useDeployContract();
+
+  const { data: txReceipt } = useWaitForTransactionReceipt({
+    hash: data,
+  });
+
+  const router = useRouter();
+
+  console.log(txReceipt);
 
   async function createAuction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    console.log("here");
+
     const formData = new FormData(event.currentTarget);
 
-    const amount = Number(formData.get("amount"));
-    const price = Number(formData.get("price"));
-
+    const name = formData.get("name");
+    const symbol = formData.get("symbol");
+    const supply = Number(formData.get("supply"));
+    const endAuctionTime = Math.round(
+      new Date(formData.get("endAuctionTime") as string).getTime() / 1000,
+    );
     if (userAddress === undefined) {
       return;
     }
 
-    // Get the FHE Instance
-    let instance = getFHEInstance();
-    if (!instance) {
-      console.log("Instance loading...");
+    deployContract({
+      abi: ConfidentialAuction.abi,
+      bytecode: ConfidentialAuction.bytecode.object as `0x${string}`,
+      args: [name, symbol, supply, endAuctionTime],
+    });
+  }
+
+  useEffect(() => {
+    if (txReceipt === undefined) {
       return;
     }
+    console.log("We got a value");
+    console.log(txReceipt);
 
-    // Start to encrypt our input
-    const input = instance.createEncryptedInput(
-      process.env.NEXT_PUBLIC_CONTRACT!,
-      "" + userAddress,
-    );
-    input.add256(amount);
-    input.add256(price);
+    // 0xa3757957bde26f6581b81b0363e00f635628c4e4
 
-    console.log(input);
-
-    let e = await input.encrypt();
-
-    console.log(e);
-
-    // TODO: Question: in the example, they show one proof for multiple add => Is it a smart contract update needed ??
-
-    console.log("encrypt data");
-  }
+    router.push(`/auction/${txReceipt.contractAddress}`);
+  }, [txReceipt]);
 
   return (
     <div>
@@ -120,12 +131,14 @@ export default function CreateAuctionForm() {
         <div className="flex justify-center pt-5">
           <button
             type="submit"
-            className={`text-white font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 focus:outline-none ${isConnected ? "bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300" : "bg-blue-400"}`}
-            disabled={!isConnected}
+            className={`text-white font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 focus:outline-none ${isConnected || !isPending ? "bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300" : "bg-blue-400"}`}
+            disabled={!isConnected || isPending}
           >
             Create an auction
           </button>
         </div>
+
+        <div>{data}</div>
       </form>
     </div>
   );
