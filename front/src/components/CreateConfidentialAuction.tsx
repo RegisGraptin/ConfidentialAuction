@@ -4,14 +4,12 @@ import {
   MdOutlineEmojiSymbols,
 } from "react-icons/md";
 import { FaSortAmountUpAlt } from "react-icons/fa";
-import { initFhevm, createInstance } from "fhevmjs/bundle";
 import React, { FormEvent, useEffect } from "react";
 import {
   useAccount,
   useDeployContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { getFHEInstance } from "../lib/fhe";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 import ConfidentialAuction from "../abi/ConfidentialAuction.json";
@@ -32,8 +30,6 @@ export default function CreateAuctionForm() {
 
   async function createAuction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    console.log("here");
 
     const formData = new FormData(event.currentTarget);
 
@@ -58,10 +54,6 @@ export default function CreateAuctionForm() {
     if (txReceipt === undefined) {
       return;
     }
-    console.log("We got a value");
-    console.log(txReceipt);
-
-    // 0xa3757957bde26f6581b81b0363e00f635628c4e4
 
     router.push(`/auction/${txReceipt.contractAddress}`);
   }, [txReceipt]);
@@ -131,7 +123,7 @@ export default function CreateAuctionForm() {
         <div className="flex justify-center pt-5">
           <button
             type="submit"
-            className={`text-white font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 focus:outline-none ${isConnected || !isPending ? "bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300" : "bg-blue-400"}`}
+            className={`text-white font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 focus:outline-none ${isConnected && !isPending ? "bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300" : "bg-blue-400"}`}
             disabled={!isConnected || isPending}
           >
             Create an auction

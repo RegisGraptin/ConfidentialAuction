@@ -3,8 +3,14 @@
 import { NextPage } from "next";
 import CreateConfidentialAuction from "../../../components/CreateConfidentialAuction";
 import { useParams } from "next/navigation";
-import { isAddress } from "viem";
+import { Address, isAddress } from "viem";
 import { useEffect, useState } from "react";
+import CreateBidForm from "../../../components/CreateBidForm";
+import UserBids from "../../../components/UserBids";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import ConfidentialAuction from "../../../abi/ConfidentialAuction.json";
+import { useReadContract } from "wagmi";
+import AuctionDetail from "../../../components/AuctionDetail";
 
 const AuctionPage: NextPage = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +36,17 @@ const AuctionPage: NextPage = () => {
 
   return (
     <>
-      <h1>Place your confidential bid</h1>
+      <section className="py-20 px-4">
+        <AuctionDetail contractAddress={params.contractAddress} />
+
+        <div className="flex justify-center">
+          <ConnectButton />
+        </div>
+
+        <UserBids contractAddress={params.contractAddress} />
+
+        <CreateBidForm contractAddress={params.contractAddress} />
+      </section>
     </>
   );
 };
