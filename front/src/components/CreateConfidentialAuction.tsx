@@ -130,7 +130,7 @@ export default function CreateAuctionForm() {
           </button>
         </div>
 
-        <div>{data}</div>
+        <div className="flex justify-center pt-5">Tx Hash: {data}</div>
       </form>
     </div>
   );
