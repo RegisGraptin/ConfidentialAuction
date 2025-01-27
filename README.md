@@ -13,7 +13,12 @@
     A decentralized confidential single-price auction for tokens with sealed bids.
     <br />
     <br />
-    <a href="https://github.com/RegisGraptin/ConfidentialAuction">View Demo</a>
+    <a href="https://github.com/RegisGraptin/ConfidentialAuction">Code</a>
+    &middot;
+    <a href="https://confidential-auction.vercel.app/">View Demo</a>
+    &middot;
+    <a href="https://youtu.be/cwD-vw3xH_Q">Video Presentation</a>
+    
   </p>
 </div>
 
@@ -99,39 +104,3 @@ After claiming their tokens, participants may refund any excess ETH paid if the 
 
 Finally, the auction owner can claim the ETH corresponding to the auction's sale.
 
-
-# Business startegy
-
-Should we create a DAO and the DAO take a fee on the transaction.
-
-
-
-## Note 
-
-We assume that we will note have two time the same requestId
-
-
-
-##### sepolia deployed
-
-0x8F6Dc2AAFF41847Fe213103DbE4A594dF95E4a42
-
-
-
-
-✅  [Success]Hash: 0x09be1db0cf7715dd2d983e115270baec2b6d6624142cf51766a90393a8b278b6
-Contract Address: 0xf9608f47363DFB1eaBB4142213B8d4789c48a90A
-Block: 7482217
-Paid: 0.08666734821799857 ETH (2755929 gas * 31.44759833 gwei)
-
-✅ Sequence #1 on sepolia | Total Paid: 0.08666734821799857 ETH (2755929 gas * avg 31.44759833 gwei)
-          
-
-
-// TODO: https://en.wikipedia.org/wiki/Single-price_auction
-
-bid1 = 100
-bid2 = 200
-
-sum(token) if settle price ==> OK 
-                        else no
