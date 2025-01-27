@@ -1,13 +1,6 @@
-## Foundry
+## Confidential Auction - Smart contract
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
-
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+For our approach, we are using foundry for the smart contract development. Regarding tests scenarios, we are using hardhat, simplifying the FHE mechanism needed for encryption and Gateway workflow.
 
 ## Documentation
 
@@ -15,46 +8,26 @@ https://book.getfoundry.sh/
 
 ## Usage
 
-### Build
-
 ```shell
+$ forge install
 $ forge build
 ```
 
-### Test
+## Tests
 
 ```shell
-$ forge test
+$ pnpm install
+$ npx hardhat test
 ```
 
-### Format
+## Deploy
+
+For the deployment, we provide a script that is loading the environment variable and call our forge script to deploy it. Feel free to update the forge script to customize your auction.
+
+First, you will need to copy .env.example and fill the variables. Then, you can call the `deploy.sh` script.
 
 ```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
+$ ./deploy.sh
 ```
 
 ### Help
